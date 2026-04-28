@@ -413,7 +413,15 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
             title = u'[%s] %s' % (', '.join(self.mp['children']), title)
         msg['Subject'] = headerEncodeField(title, 60)
         if 'sender' in self.mp and self.mp['sender']:
-            sender = u'Skoleintra - %s' % self.mp['sender']
+            # Strip RFC 5322 specials from display name before encoding.
+            # ProtonMail's SMTP parser decodes MIME-encoded From-headers
+            # and re-applies RFC 5322 parsing — so parens etc. inside the
+            # display name break address detection even when Q-encoded.
+            safe = self.mp['sender']
+            for ch in u'()<>[]\\,;:"':
+                safe = safe.replace(ch, u' ')
+            safe = u' '.join(safe.split())  # collapse whitespace
+            sender = u'Skoleintra - %s' % safe
         else:
             sender = u'Skoleintra'
         sender = headerEncodeField(sender, 80)
