@@ -417,11 +417,8 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
         else:
             sender = u'Skoleintra'
         sender = headerEncodeField(sender, 80)
-        if ',' in sender:
-            # In this case the sender name must be quoted
-            sender = '"%s"' % sender
-        sender = '%s <%s>' % (sender, config.options.senderemail)
-        msg['From'] = sender
+        msg['From'] = email.utils.formataddr(
+            (sender, config.options.senderemail))
         msg['To'] = config.options.email
 
         # Other tags just for ourselves
