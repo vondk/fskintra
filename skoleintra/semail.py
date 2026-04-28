@@ -413,18 +413,31 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
             title = u'[%s] %s' % (', '.join(self.mp['children']), title)
         msg['Subject'] = headerEncodeField(title, 60)
         if 'sender' in self.mp and self.mp['sender']:
-            # Strip RFC 5322 specials from display name before encoding.
-            # ProtonMail's SMTP parser decodes MIME-encoded From-headers
-            # and re-applies RFC 5322 parsing — so parens etc. inside the
-            # display name break address detection even when Q-encoded.
+            # ProtonMail's SMTP parser does not handle RFC 2047 encoded-words
+            # in From-headers — it treats the encoded-word as the addr-spec
+            # and fails to match MAIL FROM. We must use plain ASCII.
+            translit = {
+                u'\xe6': u'ae', u'\xf8': u'oe', u'\xe5': u'aa',
+                u'\xc6': u'Ae', u'\xd8': u'Oe', u'\xc5': u'Aa',
+                u'\xe4': u'ae', u'\xf6': u'oe', u'\xfc': u'ue',
+                u'\xc4': u'Ae', u'\xd6': u'Oe', u'\xdc': u'Ue',
+                u'\xe9': u'e',  u'\xe8': u'e',  u'\xea': u'e',
+                u'\xc9': u'E',  u'\xc8': u'E',
+                u'\xe1': u'a',  u'\xe0': u'a',
+                u'\xed': u'i',  u'\xf3': u'o',  u'\xfa': u'u',
+                u'\xf1': u'n',
+            }
             safe = self.mp['sender']
-            for ch in u'()<>[]\\,;:"':
-                safe = safe.replace(ch, u' ')
-            safe = u' '.join(safe.split())  # collapse whitespace
+            for k, v in translit.items():
+                safe = safe.replace(k, v)
+            safe = safe.encode('ascii', 'ignore').decode('ascii')
+            for ch in '()<>[]\\,;:"':
+                safe = safe.replace(ch, ' ')
+            safe = ' '.join(safe.split())
             sender = u'Skoleintra - %s' % safe
         else:
             sender = u'Skoleintra'
-        sender = headerEncodeField(sender, 80)
+        # sender is now pure ASCII — no MIME-encoding needed
         msg['From'] = email.utils.formataddr(
             (sender, config.options.senderemail))
         msg['To'] = config.options.email
