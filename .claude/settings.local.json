@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python2 -c 'import email,email.utils;from email.header import Header;from email.mime.text import MIMEText *)",
+      "Bash(python -c ' *)"
+    ]
+  }
+}

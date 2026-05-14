@@ -437,9 +437,17 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
             sender = u'Skoleintra - %s' % safe
         else:
             sender = u'Skoleintra'
-        # sender is now pure ASCII — no MIME-encoding needed
-        msg['From'] = email.utils.formataddr(
+        # sender is now pure ASCII — no MIME-encoding needed.
+        # Wrap the From-header in a Header with a large maxlinelen so the
+        # email Generator does NOT fold it onto a second line. The default
+        # 78-char wrapping would push '<kim@vonmullen.dk>' onto a
+        # continuation line, and ProtonMail's SMTP submission parser does
+        # not unfold headers — it would then see only the display-name
+        # with no <addr-spec> and reject the message with 550 5.7.26.
+        fromhdr = email.utils.formataddr(
             (sender, config.options.senderemail))
+        msg['From'] = Header(fromhdr, 'ascii', maxlinelen=998,
+                             header_name='From')
         msg['To'] = config.options.email
 
         # Other tags just for ourselves
