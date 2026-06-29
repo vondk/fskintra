@@ -52,6 +52,14 @@ def niceFilename(fn):
     return fn
 
 
+# ProtonMail (og de fleste udbydere) afviser beskeder over ~25 MB. base64
+# inflaterer payloads ~33%, så vi holder den samlede *rå* vedhæftnings-budget
+# et godt stykke under det. Når en send afvises med 552, genopbygges mailen med
+# self._dropBigAttachments = True, og vedhæftninger ud over dette budget
+# udelades (og erstattes af et direkte SkoleIntra-link). Se send().
+MAX_ATTACH_BYTES = 15 * 1024 * 1024
+
+
 def generateMIMEAttachment(path, data, usefilename=None):
     '''Turn data into an e-mail attachment'''
     fn = niceFilename(usefilename or path)
@@ -333,6 +341,28 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
         # Next, handle attachments
         # attachments: email attachments ready for attachment :)
         attachments = []
+        # Når en tidligere send blev afvist som for stor, genopbygges asEmail()
+        # med dette flag sat; vedhæftninger udelades så (efter et samlet rå-
+        # budget) og erstattes af et direkte SkoleIntra-link, så beskeden
+        # alligevel kommer igennem. Se send().
+        dropBig = getattr(self, '_dropBigAttachments', False)
+        attachBytes = [0]   # mutérbar for closure
+        dropped = []        # (url, text) for udeladte vedhæftninger
+
+        def absUrl(url):
+            if url.startswith('/'):
+                return u'https://%s%s' % (config.options.hostname, url)
+            return url
+
+        def tooBig(data):
+            if not dropBig:
+                return False
+            if attachBytes[0] + len(data) <= MAX_ATTACH_BYTES:
+                attachBytes[0] += len(data)
+                return False
+            config.log(u'Udelader stor vedhæftning (%d bytes)' % len(data), 2)
+            return True
+
         for atag in html.findAll('a'):
             try:
                 url = atag['href']
@@ -350,6 +380,11 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
                                (self.mp['title'] if self.mp['title'] else self,
                                 url))
                 if data:
+                    if tooBig(data):
+                        # behold linket, så modtageren stadig kan hente filen
+                        # på SkoleIntra
+                        atag['href'] = absUrl(url)
+                        continue
                     eatt = generateMIMEAttachment(url, data, None)
                     attachments.append(eatt)
                     atag.replaceWithChildren()  # kill the actual link
@@ -357,11 +392,23 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
         # Attach actual attachments (if any)
         for (url, text) in self.mp['attatchments']:
             data = surllib.skoleGetURL(url, False)
+            if tooBig(data):
+                dropped.append((absUrl(url), text))
+                continue
             eatt = generateMIMEAttachment(url, data, text)
             attachments.append(eatt)
 
         # Now, put the pieces together
         html = html.prettify()
+        if dropped:
+            note = u''.join(
+                u"<p style='color:#a00'>[vedhæftning fjernet — "
+                u"for stor til mail] <a href='%s'>%s</a></p>\n"
+                % (url, text or url) for (url, text) in dropped)
+            if u'</body>' in html:
+                html = html.replace(u'</body>', note + u'</body>', 1)
+            else:
+                html += note
         msgHtml = MIMEText(html, 'html', 'utf-8')
         if not iimgs and not attachments:
             # pure HTML version
@@ -493,12 +540,47 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
                 pass  # ok, but we tried...
             server.login(config.options.smtpusername.encode('ascii'),
                          config.options.smtppassword.encode('ascii'))
+
+        try:
+            try:
+                self._sendmail(server, msg)
+            except smtplib.SMTPSenderRefused as e:
+                if e.smtp_code != 552:
+                    raise
+                # Beskeden er for stor (typisk ProtonMail 552 5.3.4).
+                # smtplib har allerede kaldt rset() på forbindelsen, så vi kan
+                # genbruge den. Genopbyg mailen uden de store vedhæftninger og
+                # prøv én gang til.
+                config.log(u'ADVARSEL: besked afvist som for stor (%d bytes: '
+                           u'%s) - fjerner store vedhæftninger og prøver igen'
+                           % (len(msg.as_string()), e.smtp_error), 0)
+                self._dropBigAttachments = True
+                self._email = None  # tving genopbygning i asEmail()
+                msg = self.asEmail()
+                try:
+                    self._sendmail(server, msg)
+                except smtplib.SMTPSenderRefused as e2:
+                    if e2.smtp_code != 552:
+                        raise
+                    # Stadig for stor (fx store inline-billeder). Giv op pænt;
+                    # store() nedenfor bryder den timelige genforsøgs-løkke.
+                    config.log(u'ADVARSEL: besked stadig afvist som for stor '
+                               u'(%d bytes) - springer over for at undgå evig '
+                               u'genforsøgning' % len(msg.as_string()), 0)
+        finally:
+            try:
+                server.quit()
+            except smtplib.SMTPException:
+                pass
+
+        # Ensure that we only send once. Dette køres OGSÅ efter en håndteret
+        # 552, så det timelige job ikke bliver ved med at gensende den samme
+        # for-store besked.
+        self.store()
+
+    def _sendmail(self, server, msg):
         server.sendmail(config.options.senderemail,
                         config.options.email, msg.as_string())
-        server.quit()
-
-        # Ensure that we only send once
-        self.store()
 
 
 def hasSentMessage(date='', tp='', md5='', mid=''):
