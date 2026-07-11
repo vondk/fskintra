@@ -2,8 +2,8 @@
 #
 #
 
-import config
-import surllib
+from . import config
+from . import surllib
 import datetime
 
 DT_FORMAT = '%Y.%m.%d-%H.%M.%S.%f'

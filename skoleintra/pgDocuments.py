@@ -2,11 +2,11 @@
 
 import json
 
-import config
-import sbs4
-import schildren
-import semail
-import surllib
+from . import config
+from . import sbs4
+from . import schildren
+from . import semail
+from . import surllib
 
 SECTION = 'doc'
 MAX_CACHE_AGE = .99
@@ -48,7 +48,7 @@ def docFindDocuments(cname, rootTitle, bs, title):
             h.span.string = folder
             h.b.string = docTitle
 
-            msg = semail.Message(cname, SECTION, unicode(h))
+            msg = semail.Message(cname, SECTION, str(h))
             msg.setTitle(sfn)
             msg.setDateTime(docDate)
             msg.addAttachment(url, docTitle)

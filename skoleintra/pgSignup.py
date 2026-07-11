@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 
-import config
-import sbs4
-import schildren
-import semail
-import surllib
+from . import config
+from . import sbs4
+from . import schildren
+from . import semail
+from . import surllib
 
 SECTION = 'sgn'
 MAX_CACHE_AGE = .49
@@ -43,7 +43,7 @@ def findEvents(cname, bs):
                 v.lower().startswith(u'lukket')):
             continue  # Ignore this line
 
-        msg = semail.Message(cname, SECTION, unicode(ebs))
+        msg = semail.Message(cname, SECTION, str(ebs))
         msg.setTitle(u'%s: %s' % kvl[0])
         msg.maybeSend()
 

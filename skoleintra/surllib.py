@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
-import cgi
-import cookielib
+import http.cookiejar as cookielib
 import datetime
 import mechanize
 import hashlib
@@ -9,13 +8,13 @@ import os
 import re
 import sys
 import time
-import urllib
-import urllib2
-import urlparse
+import urllib.error
+import urllib.parse
+import urllib.request
 
-import config
-import sbs4
-import pgConfirm
+from . import config
+from . import sbs4
+from . import pgConfirm
 
 
 def absurl(url):
@@ -26,8 +25,8 @@ def absurl(url):
 
 
 def unienc(s):
-    '''Ensure that s is encoded as a binary string (not unicode)'''
-    if type(s) == unicode:
+    '''Ensure that s is encoded as a binary string (bytes)'''
+    if isinstance(s, str):
         return s.encode('utf-8')
     else:
         return s
@@ -115,7 +114,7 @@ class Browser(mechanize.Browser):
 
     def open(self, url, *args, **aargs):
         ofp, self.firstPass = self.firstPass, False
-        if type(url) in [str, unicode]:
+        if isinstance(url, str):
             furl = url
         else:
             furl = url.get_full_url()
@@ -179,7 +178,7 @@ def skoleLogin():
 
     try:
         resp = br.open(url)
-    except urllib2.HTTPError as e:
+    except urllib.error.HTTPError as e:
         config.log(u'skoleLogin: Kan ikke logge på ForældreIntra?', -1)
         config.log(u'skoleLogin: URL: %s' % url, -1)
         config.log(u'skoleLogin: Fejlkode: %d' % e.code, -1)
@@ -196,6 +195,8 @@ def skoleLogin():
     for round in range(N):  # try at most N times before failing
         url = resp.geturl()
         data = resp.read()
+        if isinstance(data, bytes):
+            data = data.decode('utf-8', 'replace')
         config.log(u'Log ind skridt %d/%d: %s' % (round + 1, N, url), 3)
 
         forms = list(br.forms())
@@ -260,7 +261,7 @@ def skoleLogin():
             resp = br.submit()
             continue
 
-        if urlparse.urlparse(resp.geturl()).path == '/Account/IdpLogin':
+        if urllib.parse.urlparse(resp.geturl()).path == '/Account/IdpLogin':
             if 'ikke adgang' in data:
                 config.log(u'Log ind giver en fejlmeddelse -- '
                            u'har du angivet korrekt kodeord?')
@@ -309,10 +310,11 @@ def url2cacheFileName(url, postData):
     '''For a given URL, return the filename used for caching the result'''
     assert(type(url) == str)
     if postData:
-        url += postData
-    up = urlparse.urlparse(url)
-    p = urllib.url2pathname(up.path)
-    p = p.decode('utf-8', 'replace').replace(u'\ufffd', '_')
+        url += postData if isinstance(postData, str) \
+            else postData.decode('utf-8', 'replace')
+    up = urllib.parse.urlparse(url)
+    p = urllib.request.url2pathname(up.path)
+    p = p.replace(u'\ufffd', '_')
     parts = [config.options.cachedir,
              up.scheme,
              up.netloc,
@@ -320,18 +322,16 @@ def url2cacheFileName(url, postData):
     if up.query:
         qq = ''
         az = re.compile(r'[^0-9a-zA-Z]')
-        for (k, vs) in sorted(cgi.parse_qs(up.query).items()):
+        for (k, vs) in sorted(urllib.parse.parse_qs(up.query).items()):
             xs = [az.sub(lambda x: hex(ord(x.group(0))), x) for x in [k] + vs]
             qq += '_' + '-'.join(xs)
         if len(qq) > 32:
             # Some queries are too long - this may fail when writing to disk
-            qq = '_' + hashlib.md5(qq).hexdigest()
+            qq = '_' + hashlib.md5(qq.encode('utf-8')).hexdigest()
         parts[-1] += qq
 
     cfn = os.path.join(*parts)
     cfn = cfn.replace('\\', '/')
-    if type(cfn) == unicode and not os.path.supports_unicode_filenames:
-        cfn = cfn.encode('utf-8')
     return cfn
 
 
@@ -349,18 +349,12 @@ def skoleGetURL(url, asSoup=False, noCache=False, postData=None,
         else:
             return data
 
-    if type(url) == unicode:
-        url, uurl = url.encode('utf-8'), url
-    else:
-        uurl = url.decode('utf-8')
+    uurl = url
     if url.startswith('/'):
         url = absurl(url)
 
     if type(postData) == dict:
-        pd = {}
-        for (k, v) in postData.items():
-            pd[unienc(k)] = unienc(v)
-        postData = urllib.urlencode(pd)
+        postData = urllib.parse.urlencode(postData).encode('utf-8')
     else:
         postData = unienc(postData)
 
@@ -386,7 +380,7 @@ def skoleGetURL(url, asSoup=False, noCache=False, postData=None,
                 url += '&_=' + str(int(time.time()*1000))
             else:
                 url += '?_=' + str(int(time.time()*1000))
-        qurl = urllib.quote(url, safe=':/?=&%')
+        qurl = urllib.parse.quote(url, safe=':/?=&%')
         config.log(u'skoleGetURL: Prøver at hente %s' % qurl, 2)
         skoleLogin()
         br = getBrowser()

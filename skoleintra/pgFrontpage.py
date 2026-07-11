@@ -4,11 +4,11 @@ import collections
 import re
 import time
 
-import config
-import sbs4
-import schildren
-import semail
-import surllib
+from . import config
+from . import sbs4
+from . import schildren
+from . import semail
+from . import surllib
 
 SECTION = 'frp'
 
@@ -23,14 +23,14 @@ def parseFrontpageItem(cname, div):
         # Comments are enabled
         txt = comments.text.strip()
         if u'tilføj' not in txt.lower():
-            m = re.match(ur'.*vis (\d+) kommentar.*', txt.lower())
+            m = re.match(r'.*vis (\d+) kommentar.*', txt.lower())
             assert(m)
             nc = int(m.group(1))
             if nc > 0:
                 suff = '/news/pins/%s/comments' % div['data-feed-item-id']
                 url = schildren.getChildURL(cname, suff)
                 bs = surllib.skoleGetURL(url, asSoup=True, postData={'_': str(nc)})
-                cdiv = unicode(bs.find('div', 'sk-comments-container'))
+                cdiv = str(bs.find('div', 'sk-comments-container'))
                 cdiv = u'<br>' + cdiv
 
     author = div.find('div', 'sk-news-item-author')
@@ -43,13 +43,13 @@ def parseFrontpageItem(cname, div):
         e['style'] = 'font-weight: bold'
     for e in body.select('div'):
         # remove empty divs
-        contents = u''.join(map(unicode, e.children)).strip()
+        contents = u''.join(map(str, e.children)).strip()
         if not contents:
             e.extract()
     # Trim extra white space - sometimes unecessary linebreaks are introduced
     sbs4.trimSoup(body)
 
-    msg = semail.Message(cname, SECTION, unicode(body)+cdiv)
+    msg = semail.Message(cname, SECTION, str(body)+cdiv)
 
     for e in body.select('span, strong, b, i'):
         e.unwrap()
@@ -72,7 +72,7 @@ def parseFrontpageItem(cname, div):
             author.find('a', 'sk-news-show-more-link')]:
         if tag:
             tag.extract()
-    recp = re.sub(ur'\s*(,| og )\s*', ',', author.text.strip())
+    recp = re.sub(r'\s*(,| og )\s*', ',', author.text.strip())
     recp = recp.split(u',')
     msg.setRecipient(recp)
 
@@ -101,14 +101,14 @@ def parseFrontpage(cname, bs):
     if ul:
         for li in ul.findAll('li', recursive=False):
             for c in li.contents:
-                uc = unicode(c).strip().lower()
+                uc = str(c).strip().lower()
                 if not uc:
                     continue
                 if u'har fødselsdag' in uc:
-                    today = unicode(time.strftime(u'%d. %b. %Y'))
+                    today = str(time.strftime(u'%d. %b. %Y'))
                     c.append(u" \U0001F1E9\U0001F1F0")  # Unicode DK Flag
                     sbs4.appendTodayComment(c)
-                    msg = semail.Message(cname, SECTION, unicode(c))
+                    msg = semail.Message(cname, SECTION, str(c))
                     msg.setTitle(c.text.strip())
                     msg.setDateTime(today)
 

@@ -2,8 +2,8 @@
 
 import re
 
-import config
-import surllib
+from . import config
+from . import surllib
 
 # Map of children => urlPrefix
 # 'Andrea 0A' => '/parent/1234/Andrea/'

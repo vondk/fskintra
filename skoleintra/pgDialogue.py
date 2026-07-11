@@ -4,11 +4,11 @@ import collections
 import json
 import re
 
-import config
-import sbs4
-import schildren
-import semail
-import surllib
+from . import config
+from . import sbs4
+from . import schildren
+from . import semail
+from . import surllib
 
 SECTION = 'msg'
 
@@ -86,7 +86,7 @@ def parseTrayMessage(cname, bs, mid, sender):
     more = rec.find('a', 'sk-message-show-more-link')
     if more:
         more.extract()  # remove Vis ... mere
-    jsn['Recipients'] = re.split(ur'\s*(?:,| og )\s*', rec.text.strip())
+    jsn['Recipients'] = re.split(r'\s*(?:,| og )\s*', rec.text.strip())
 
     return msgFromJson(cname, jsn)
 
@@ -123,7 +123,7 @@ def parseTrayMessages(cname, bs):
 
 
 def markMessageAsRead(cname, mid, isRead=True):
-    assert(type(mid) in [str, unicode])
+    assert(isinstance(mid, str))
     isRead = 'true' if isRead else 'false'
     url = schildren.getChildURL(cname, '/messages/UpdateMessagesReadState')
     data = {'selectionState[MessageIds][]': mid, 'isRead': isRead}
@@ -155,7 +155,7 @@ def parseMessages(cname, bs):
     emsgs = []
     for i, c in enumerate(conversations[::1]):
         tid = c.get('ThreadId')
-        lmid = unicode(c.get('LatestMessageId'))
+        lmid = str(c.get('LatestMessageId'))
         if not tid:
             # ThreadId can be empty if this is a msg to all students
             tid = ''
@@ -194,7 +194,7 @@ def parseMessages(cname, bs):
 
         assert(type(msgs) == list)
         for jsn in msgs[::-1]:
-            mid = unicode(jsn.get('Id'))
+            mid = str(jsn.get('Id'))
             if semail.hasSentMessage(tp=SECTION, mid=(tid, mid)):
                 continue
 

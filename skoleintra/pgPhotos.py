@@ -2,14 +2,14 @@
 
 import glob
 import json
-import md5
+import hashlib
 import os
 
-import config
-import sbs4
-import schildren
-import semail
-import surllib
+from . import config
+from . import sbs4
+from . import schildren
+from . import semail
+from . import surllib
 
 SECTION = 'pht'
 MAX_CACHE_AGE = .99
@@ -41,7 +41,7 @@ def sendPhotos(cname, title, mid, photos):
         pending = photos
 
     # Send the photos in e-mails of PHOTOS_PER_EMAIL pictures
-    ecount = (len(pending)-1) / PHOTOS_PER_EMAIL + 1
+    ecount = (len(pending)-1) // PHOTOS_PER_EMAIL + 1
 
     for ei in range(ecount):
         pics = pending[:PHOTOS_PER_EMAIL]
@@ -55,7 +55,7 @@ def sendPhotos(cname, title, mid, photos):
         for i, img in enumerate(ebs.select('img')):
             img['src'] = pics[i]
 
-        msg = semail.Message(cname, SECTION, unicode(ebs))
+        msg = semail.Message(cname, SECTION, str(ebs))
         if ecount > 1:
             msg.setTitle(u'Billeder: %s (%d/%d)' % (title, ei+1, ecount))
         else:
@@ -68,7 +68,7 @@ def sendPhotos(cname, title, mid, photos):
 def findPhotosInFolder(cname, url, bs):
     '''Search a folder for new photos'''
     title = bs.h2.text.strip()
-    mid = md5.md5(url.encode('utf-8')).hexdigest()[::2]
+    mid = hashlib.md5(url.encode('utf-8')).hexdigest()[::2]
     photos = []
 
     for img in bs.select('img'):

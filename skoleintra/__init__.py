@@ -4,6 +4,17 @@ import sys
 import locale
 
 
+def _versionTuple(s):
+    '''Turn a version string like '4.15.0' into a comparable tuple of ints
+    so that e.g. '4.15.0' sorts correctly above '4.5' (a plain string
+    comparison gets this wrong)'''
+    parts = []
+    for p in str(s).split('.'):
+        num = ''.join(ch for ch in p if ch.isdigit())
+        parts.append(int(num) if num else 0)
+    return tuple(parts)
+
+
 def dependencyError(package, required, current=None):
     err = u'fskintra kræver %s version %s' % (package, required)
     if current:
@@ -14,17 +25,17 @@ Se evt. her for hjælp:
 
 
 #
-# Check that we have Python 2.7.x
+# Check that we have Python 3.7+
 #
-if sys.version_info[0] != 2 or sys.version_info[1] < 7:
-    dependencyError('Python', '2.7.x', sys.version.split()[0])
+if sys.version_info < (3, 7):
+    dependencyError('Python', '3.7+', sys.version.split()[0])
 
 #
 # Beautiful Soup ?
 #
 try:
     import bs4
-    if bs4.__version__ < '4.5':
+    if _versionTuple(bs4.__version__) < (4, 5):
         dependencyError('BeautifulSoup', '4.5.x', bs4.__version__)
 except ImportError:
     dependencyError('BeautifulSoup', '4.5.x')
@@ -43,11 +54,11 @@ except bs4.FeatureNotFound:
 #
 try:
     import mechanize
-    if mechanize.__version__ < (0, 3):
-        dependencyError('Mechanize', '0.3.x',
+    if mechanize.__version__ < (0, 4):
+        dependencyError('Mechanize', '0.4.x',
                         '.'.join(map(str, mechanize.__version__[:3])))
 except ImportError:
-    dependencyError('Mechanize', '0.3.x')
+    dependencyError('Mechanize', '0.4.x')
 
 #
 # Check that a Danish locale is available

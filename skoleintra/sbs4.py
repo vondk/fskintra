@@ -6,7 +6,7 @@ import re
 import sys
 import time
 
-import config
+from . import config
 
 
 def copy(bs):
@@ -40,7 +40,7 @@ def find1orFail(bs, sel, asText=False):
 
 def contents2html(bs):
     'Return HTML inside bs as unicode text'
-    return u''.join(unicode(c) for c in bs.contents).strip()
+    return u''.join(str(c) for c in bs.contents).strip()
 
 
 def appendComment(bs, text=''):
@@ -166,7 +166,7 @@ def condenseSoup(bs):
     '''Trim bs for empty divs, etc to condense the HTML put in e-mails'''
     for e in bs.select('div'):
         # remove empty divs
-        contents = u''.join(map(unicode, e.children)).strip()
+        contents = u''.join(map(str, e.children)).strip()
         if not contents:
             e.extract()
 

@@ -1,20 +1,25 @@
-FROM ubuntu:18.04
+FROM python:3.12-slim
 LABEL description='https://github.com/svalgaard/fskintra'
 
-ENV LC_ALL=da_DK.utf-8
+ENV LC_ALL=da_DK.UTF-8
+ENV LANG=da_DK.UTF-8
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONIOENCODING=UTF-8
 
-RUN mkdir -p /fskintra
+# fskintra needs a Danish locale to parse/format Danish dates
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends locales && \
+    sed -i '/da_DK.UTF-8/s/^# //' /etc/locale.gen && \
+    locale-gen && \
+    rm -rf /var/lib/apt/lists/*
+
 WORKDIR /fskintra
 
-COPY . /fskintra
-
-RUN apt-get update && \
-    apt-get install -y locales python python-pip libxml2-dev libxslt1-dev && \
-    localedef -i da_DK -c -f UTF-8 -A /usr/share/locale/locale.alias da_DK
-
+# Install dependencies first so they are cached independently of the source
+COPY requirements.txt /fskintra/
 RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . /fskintra
 
 VOLUME /root/.skoleintra
 

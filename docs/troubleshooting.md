@@ -1,24 +1,24 @@
 # Problemer? #
 
-## Python 2 ? ##
+## Python 3 ? ##
 
-Hvis man prøver at køre ```fskintra``` med Python version 3.x -
-fx. hvis ens standard Python version netop er version 3 -
+```fskintra``` kræver Python version 3.7 eller nyere. Hvis man prøver at
+køre ```fskintra``` med en for gammel Python - fx. en gammel Python 2 -
 får man en fejl lignende følgende:
 
 ```
 user@sputnik:~/fskintra$ ./fskintra.py
-fskintra kræver Python version 2.7.x
-Python version 3.7.2 er installeret
+fskintra kræver Python version 3.7+
+Python version 2.7.18 er installeret
 Se evt. her for hjælp:
     https://svalgaard.github.io/fskintra/install#krav
 ```
 
-Løsningen er først at sikre at man har Python 2.7.x installeret og dernæst
-eksplicit vælge den når man kører ```fskintra```, fx:
+Løsningen er først at sikre at man har Python 3.7 eller nyere installeret og
+dernæst eksplicit vælge den når man kører ```fskintra```, fx:
 
 ```console
-user@sputnik:~/fskintra$ python2 ./fskintra.py
+user@sputnik:~/fskintra$ python3 ./fskintra.py
 ```
 
 ## Dansk locale ##

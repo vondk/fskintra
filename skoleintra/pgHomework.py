@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
 
-import config
 import glob
 import os
 import json
-import schildren
-import semail
-import surllib
-import md5
+import hashlib
 import re
 from datetime import datetime
+
+from . import config
+from . import schildren
+from . import semail
+from . import surllib
 
 SECTION = 'hwk'
 
@@ -77,7 +78,7 @@ def formatHomework(cname, bs):
                             'td:nth-of-type(2)').get_text(strip=True)
                 )
         html_temp += u'</tbody></table><br>'
-        checksum = md5.md5(html_temp.encode('utf8')).hexdigest()
+        checksum = hashlib.md5(html_temp.encode('utf8')).hexdigest()
         if checksum in previouslySent:
             # hvis lektien tidligere er sendt og har due-date i dag,
             # så undlad at sende
@@ -87,7 +88,7 @@ def formatHomework(cname, bs):
             else:
                 # Måned angivet fuldt ud ("Maj")
                 ft = '%A, %d. %b %Y:'
-            if datetime.strptime(header.encode('utf-8'), ft).date() == datetime.today().date():
+            if datetime.strptime(header, ft).date() == datetime.today().date():
                 continue
         homework_checksums.add(checksum)
         html_temp += html
@@ -124,8 +125,8 @@ def skoleHomework(cname):
                 if homework and homework_checksums:
                     wid = url['href'].split('/')[-1]  # e.g. 35-2018
                     title = bs.find('h3').text.strip()
-                    msg = semail.Message(cname, SECTION, unicode(homework))
-                    msg.setTitle(unicode(title))
+                    msg = semail.Message(cname, SECTION, str(homework))
+                    msg.setTitle(str(title))
                     msg.setMessageID(wid)
                     msg.setData(list(homework_checksums))
                     msg.maybeSend()

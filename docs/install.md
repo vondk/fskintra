@@ -2,7 +2,7 @@
 
 ## Krav ##
 
-* Python 2.7.x (ikke 3.x!)
+* Python 3.7 eller nyere
 * Pythonpakker: mechanize, BeautifulSoup, lxml (se punkt 2 nedenfor)
 
 ELLER
@@ -10,12 +10,11 @@ ELLER
 * Docker - se i så fald på [Docker siden](docker.md).
 * Email-konto enten som smtp server hos dig selv eller fx. en Gmail konto
 
-Givet at Python 2.7 er ved at blive udfaset, er Docker-løsningen nok klart
-nemmest at få til at virke.
+Docker-løsningen er nok klart nemmest at få til at virke.
 
 ## 1. Hent fskintra ##
 
-Tjek først at du har Python 2 installeret og hent dernæst nyeste version
+Tjek først at du har Python 3 installeret og hent dernæst nyeste version
 af ```fskintra``` fra [github](https://github.com/svalgaard/fskintra) -
 fx ved at hente zip-filen og pakke den ud, eller endnu bedre ved at bruge git:
 
@@ -47,10 +46,10 @@ i dit Linux/Mac pakkesystem.
 Ellers kan du hente [PIP her](https://pypi.org/project/pip/).
 
 ```console
-# Check først at det er pip til Python 2.x du bruger,
-# muligvis hedder programmet pip2 eller lignende:
+# Check først at det er pip til Python 3.x du bruger,
+# muligvis hedder programmet pip3 eller lignende:
 user@sputnik:~/fskintra$ pip -V
-pip 10.0.1 from /.../pip (python 2.7)
+pip 24.0 from /.../pip (python 3.12)
 
 user@sputnik:~/fskintra$ sudo pip install -r requirements.txt
 ```

@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
 
 import argparse
-import codecs
-import ConfigParser
+import base64
+import configparser
 import getpass
 import inspect
-import locale
 import os
 import re
 import sys
@@ -23,51 +22,53 @@ options = argparse.Namespace(verbosity=1)
 # Options that must/can be set in the CONFIG file
 CONFIG_OPTIONS = (
     (u'logintype',
-     re.compile(ur'^(alm|uni)$'),
+     re.compile(r'^(alm|uni)$'),
      u"Logintype - enten 'alm' (almindeligt) eller 'uni' (UNI-Login)"),
     (u'username',
-     re.compile(ur'^[-.a-zA-Z0-9]+$'),
+     re.compile(r'^[-.a-zA-Z0-9]+$'),
      u'Brugernavn, fx. petjen'),
     (u'password',
-     re.compile(ur'^.+$'),
+     re.compile(r'^.+$'),
      u'Kodeord fx kaTTx24'),
     (u'hostname',
-     re.compile(ur'^[-.a-zA-Z0-9]+$'),
+     re.compile(r'^[-.a-zA-Z0-9]+$'),
      u'Skoleintra domæne fx aaskolen.m.skoleintra.dk'),
     (u'cacheprefix',
-     re.compile(ur''),
+     re.compile(r''),
      u'Præfix til cache+msg katalogerne (evt. \'-\' hvis du blot vil bruge '
      u'../cache hhv. ../msg)'),
     (u'email',
-     re.compile(ur'^.+$'),
+     re.compile(r'^.+$'),
      u'Modtageremailadresse (evt. flere adskilt med komma)'),
     (u'senderemail',
-     re.compile(ur'^.+$'),
+     re.compile(r'^.+$'),
      u'Afsenderemailadresse (evt. samme adresse som ovenover)'),
     (u'smtphostname',
-     re.compile(ur'^[-.a-zA-Z0-9]+$'),
+     re.compile(r'^[-.a-zA-Z0-9]+$'),
      u'SMTP servernavn (evt. localhost hvis du kører din egen server)'
      u' fx smtp.gmail.com eller asmtp.mail.dk'),
     (u'smtpport',
-     re.compile(ur'^[0-9]+$'),
+     re.compile(r'^[0-9]+$'),
      u'SMTP serverport fx 25 (localhost), 587 (gmail, tdc)'),
     (u'smtpusername',
-     re.compile(ur''),
+     re.compile(r''),
      u'SMTP Login (evt. tom hvis login ikke påkrævet)'),
     (u'smtppassword',
-     re.compile(ur''),
+     re.compile(r''),
      u'SMTP password (evt. tom hvis login ikke påkrævet)'))
 
 
 def ensureDanish():
-    '''Ensure that we can do Danish letters on stderr, stdout by wrapping
-    them using codecs.getwriter if necessary'''
+    '''Ensure that we can write Danish letters on stdout/stderr by
+    reconfiguring the streams to UTF-8 if possible'''
 
-    enc = locale.getpreferredencoding() or 'ascii'
-    test = u'\xe6\xf8\xe5\xc6\xd8\xc5\xe1'.encode(enc, 'replace')
-    if '?' in test or sys.version_info < (2, 6):
-        sys.stderr = codecs.getwriter('UTF-8')(sys.stderr)
-        sys.stdout = codecs.getwriter('UTF-8')(sys.stdout)
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding='utf-8')
+        except (AttributeError, ValueError):
+            # Stream is not a regular TextIOWrapper (e.g., replaced by a
+            # test harness) - nothing we can do, just continue
+            pass
 
 
 ensureDanish()
@@ -90,9 +91,11 @@ def clog(cname, s, level=1):
     return log(u'[%s] %s' % (cname, s), level)
 
 
-class ProfileConf(ConfigParser.ConfigParser):
+class ProfileConf(configparser.ConfigParser):
     def __init__(self, profile):
-        ConfigParser.ConfigParser.__init__(self)
+        # interpolation=None so that '%' in values (e.g. passwords) is kept
+        # verbatim, matching the behaviour of the old Python 2 ConfigParser
+        configparser.ConfigParser.__init__(self, interpolation=None)
         self.profile = profile
         # Add 'default' section
         self._sections['default'] = self._dict()
@@ -101,24 +104,30 @@ class ProfileConf(ConfigParser.ConfigParser):
         dn = os.path.dirname(filename)
         if dn and not os.path.isdir(dn):
             os.makedirs(dn)
-        with open(filename, 'w') as fp:
+        with open(filename, 'w', encoding='utf-8') as fp:
             self.write(fp)
 
+    def read(self, filenames, encoding='utf-8'):
+        # Always read the configuration file as UTF-8 (writeTo writes UTF-8),
+        # regardless of the platform's preferred encoding
+        return configparser.ConfigParser.read(self, filenames,
+                                              encoding=encoding)
+
     def __getitem__(self, option):
-        option = str(option)  # Ensure this is a 8-bit string
+        option = str(option)
         for section in [self.profile, 'default']:
             try:
                 value = self.get(section, option)
-                if 'password' in option:
-                    value = self.b64dec(value)
-                return value.decode('utf-8')
-            except ConfigParser.Error:
+            except configparser.Error:
                 continue
+            if 'password' in option:
+                value = self.b64dec(value)
+            return value
         return ''
 
     def __setitem__(self, option, value):
-        option = str(option)  # Ensure this is a 8-bit string
-        value = value.encode('utf-8') if type(value) == unicode else str(value)
+        option = str(option)
+        value = value if isinstance(value, str) else str(value)
 
         if 'password' in option:
             value = self.b64enc(value)
@@ -128,45 +137,48 @@ class ProfileConf(ConfigParser.ConfigParser):
         self.set(self.profile, option, value)
 
     def b64enc(self, pswd):
-        return ('pswd:' + pswd.encode('base64')).strip() if pswd else ''
+        if not pswd:
+            return ''
+        enc = base64.b64encode(pswd.encode('utf-8')).decode('ascii')
+        return 'pswd:' + enc
 
     def b64dec(self, pswd):
         if pswd.startswith('pswd:'):
-            return pswd[5:].decode('base64')
+            return base64.b64decode(pswd[5:]).decode('utf-8')
         return pswd
 
 
 def configure(configfilename, profile):
     cfg = ProfileConf(profile)
-    print u'Din nye opsætning gemmes her:', configfilename
+    print(u'Din nye opsætning gemmes her:', configfilename)
     if os.path.isfile(configfilename):
         if cfg.read(configfilename):
             if cfg.sections() == [profile]:
-                print u'Din tidligere opsætning bliver helt nulstillet'
+                print(u'Din tidligere opsætning bliver helt nulstillet')
             else:
-                print u'Tidligere opsætning indlæst fra konfigurationsfilen'
-                print u'Opsætning i afsnittet [%s] bliver nulstillet' % profile
+                print(u'Tidligere opsætning indlæst fra konfigurationsfilen')
+                print(u'Opsætning i afsnittet [%s] bliver nulstillet' % profile)
         else:
-            print u'Kunne IKKE læse tidligere indhold fra konfigurationsfilen'
-            print u'Din opsætning bliver HELT nulstillet,'
+            print(u'Kunne IKKE læse tidligere indhold fra konfigurationsfilen')
+            print(u'Din opsætning bliver HELT nulstillet,')
 
-    print u'Tryk CTRL-C for evt. at stoppe undervejs'
+    print(u'Tryk CTRL-C for evt. at stoppe undervejs')
 
     for (key, check, question) in CONFIG_OPTIONS:
         if key == 'cacheprefix':
             cfg['cacheprefix'] = cfg['hostname'].split('.')[0]
             question += ', default: ' + cfg['cacheprefix']
         while True:
-            print
-            print question + u':'
+            print()
+            print(question + u':')
             try:
                 if key.endswith('password'):
                     a = getpass.getpass('')
                 else:
-                    a = raw_input()
-                a = a.decode(sys.stdin.encoding).strip()
+                    a = input()
+                a = a.strip()
             except KeyboardInterrupt:
-                print u'\nOpsætning afbrydes!'
+                print(u'\nOpsætning afbrydes!')
                 sys.exit(1)
             if check.match(a):
                 if a or key != 'cacheprefix':
@@ -174,14 +186,14 @@ def configure(configfilename, profile):
                 break
             else:
                 if a:
-                    print u'Angiv venligst en lovlig værdi'
+                    print(u'Angiv venligst en lovlig værdi')
                 else:
-                    print u'Angiv venligst en værdi'
+                    print(u'Angiv venligst en værdi')
 
     cfg.writeTo(configfilename)
 
-    print
-    print u'Din nye opsætning er klar -- kør nu programmet uden --config'
+    print()
+    print(u'Din nye opsætning er klar -- kør nu programmet uden --config')
     sys.exit(0)
 
 
@@ -289,7 +301,7 @@ https://github.com/svalgaard/fskintra/
             if not s.optional:
                 args.sections.add(s.section)
     else:
-        secs = filter(None, u','.join(args.sections).lower().split(u','))
+        secs = list(filter(None, u','.join(args.sections).lower().split(u',')))
         args.sections = defsecs.copy()
 
         if u'list' in secs:
@@ -355,12 +367,12 @@ om du har kaldt fskintra med argumenterne -p, -h og -t.
     if args.password is not None or args.smtppassword is not None:
         if args.password is not None:
             cfg['password'] = args.password
-            print u'Kodeord opdateret'
+            print(u'Kodeord opdateret')
         if args.smtppassword is not None:
             cfg['smtppassword'] = args.smtppassword
-            print u'SMTP-kodeord opdateret'
+            print(u'SMTP-kodeord opdateret')
         cfg.writeTo(args.configfilename)
-        print u"Konfigurationsfilen '%s' opdateret" % args.configfilename
+        print(u"Konfigurationsfilen '%s' opdateret" % args.configfilename)
         sys.exit(0)
 
     # Check that the configuration in cfg is sane
@@ -429,7 +441,7 @@ class Section:
         self.desc = f.__doc__
         if not self.desc:
             raise TypeError('%s.__doc__ cannot be empty!' % name)
-        self.args = inspect.getargspec(f).args
+        self.args = inspect.getfullargspec(f).args
         if self.args not in [['cname'], ['cnames']]:
             raise TypeError('%s must take one parameter with name cname/cnames'
                             % name)

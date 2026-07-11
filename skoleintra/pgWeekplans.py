@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 
-import config
-import sbs4
-import schildren
-import semail
-import surllib
+from . import config
+from . import sbs4
+from . import schildren
+from . import semail
+from . import surllib
 
 
 SECTION = 'pln'
@@ -76,7 +76,7 @@ def skoleWeekplans(cname):
             wid = url.split('/')[-1]  # e.g. 35-2018
             title = plan.find('h3').text.strip()
 
-            msg = semail.Message(cname, SECTION, unicode(plan))
+            msg = semail.Message(cname, SECTION, str(plan))
             msg.setTitle(title)
             msg.setMessageID(wid)
             msg.maybeSend()

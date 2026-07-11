@@ -1,24 +1,24 @@
 # -*- coding: utf-8 -*-
 
 import glob
-import imghdr
+import hashlib
 import json
-import md5
 import mimetypes
 import os
 import shutil
 import smtplib
 import socket
-import urllib
-import urllib2
+import urllib.error
+import urllib.parse
 import time
 
-import config
-import sbs4
-import surllib
+from . import config
+from . import sbs4
+from . import surllib
 
-import email
+import email.utils
 from email import encoders
+from email.charset import QP, add_charset
 from email.header import Header
 from email.mime.audio import MIMEAudio
 from email.mime.base import MIMEBase
@@ -26,27 +26,45 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
 # Set quoted-printable as default (instead of base64)
-email.Charset.add_charset('utf-8', email.Charset.QP, email.Charset.QP, 'utf-8')
+add_charset('utf-8', QP, QP, 'utf-8')
+
+
+def _isImage(data):
+    '''Lightweight replacement for the removed imghdr.what(): return True if
+    data looks like a known image format (by magic bytes)'''
+    if not data:
+        return False
+    if data[:4] == b'RIFF' and data[8:12] == b'WEBP':
+        return True
+    sigs = (b'\xff\xd8\xff',            # jpeg
+            b'\x89PNG\r\n\x1a\n',       # png
+            b'GIF87a', b'GIF89a',       # gif
+            b'BM',                      # bmp
+            b'II*\x00', b'MM\x00*')     # tiff
+    return any(data.startswith(s) for s in sigs)
 
 
 def headerEncodeField(f, maxlinelen=40):
     '''Encode text suitable as a quoted-printable header'''
-    if type(f) == str:
+    if isinstance(f, bytes):
         try:
             f = f.decode('utf-8')
         except UnicodeDecodeError:
             # Probably iso-8859-1
             f = f.decode('iso-8859-1')
+    # Note: in Python 3 Header.encode() (not str(Header)) produces the
+    # RFC 2047 encoded-word wire format; str() would return the raw display
+    # string, leaving non-ASCII unencoded in the header.
     try:
         f.encode('ascii')
-        return str(Header(f, 'ascii', maxlinelen))
+        return Header(f, 'ascii', maxlinelen).encode()
     except UnicodeEncodeError:
-        return str(Header(f, 'utf-8', maxlinelen))
+        return Header(f, 'utf-8', maxlinelen).encode()
 
 
 def niceFilename(fn):
     '''Turn fn (probably an URL) into an (attachment) filename'''
-    fn = urllib.unquote(fn).replace('\\', '/')
+    fn = urllib.parse.unquote(fn).replace('\\', '/')
     fn = os.path.basename(fn)
     fn = fn.split('?')[0]
     return fn
@@ -72,8 +90,9 @@ def generateMIMEAttachment(path, data, usefilename=None):
         ctype = 'application/octet-stream'
     maintype, subtype = ctype.split('/', 1)
     if maintype == 'text':
-        # Note: we should handle calculating the charset
-        msg = MIMEText(data, _subtype=subtype)
+        if isinstance(data, bytes):
+            data = data.decode('utf-8', 'replace')
+        msg = MIMEText(data, _subtype=subtype, _charset='utf-8')
     elif maintype == 'image':
         msg = MIMEImage(data, _subtype=subtype)
     elif maintype == 'audio':
@@ -86,7 +105,7 @@ def generateMIMEAttachment(path, data, usefilename=None):
     # do not do this here - already done above.
     # encoders.encode_base64(msg)
     # Set the filename parameter
-    if type(fn) != unicode:
+    if isinstance(fn, bytes):
         fn = fn.decode('utf-8')
     fne = headerEncodeField(fn)
     msg.add_header('Content-Disposition', 'attachment', filename=fne)
@@ -98,11 +117,11 @@ class Message:
     def __init__(self, cname, tp, html):
         self.mp = {}
 
-        assert(type(cname) == unicode and cname)
+        assert(isinstance(cname, str) and cname)
         self.mp['children'] = [cname]
-        assert(type(tp) == str and len(tp) == 3)
+        assert(isinstance(tp, str) and len(tp) == 3)
         self.mp['type'] = tp  # msg or ...
-        assert(type(html) == unicode)
+        assert(isinstance(html, str))
         self.mp['html'] = html  # html content
 
         self.mp['title'] = None
@@ -131,13 +150,13 @@ class Message:
         return txt
 
     def setTitle(self, title, shorten=False):
-        assert(type(title) == unicode)
+        assert(isinstance(title, str))
         if shorten and len(title) > 40:
             title = title[:40] + title[40:].split(' ', 2)[0] + '...'
         self.mp['title'] = title
 
     def addChild(self, cname):
-        assert(type(cname) == unicode and cname)
+        assert(isinstance(cname, str) and cname)
         if cname not in self.mp['children']:
             self.mp['children'].append(cname)
 
@@ -145,7 +164,7 @@ class Message:
         return self.mp['children'][:]
 
     def setDateTime(self, dt):
-        assert(type(dt) == unicode)
+        assert(isinstance(dt, str))
         ts = time.localtime()  # Use NOW by default
 
         dt2 = dt.split(',')[-1].strip().replace('.', '')
@@ -164,7 +183,7 @@ class Message:
         self.mp['date-set'] = True
 
     def setSender(self, sender):
-        assert(type(sender) == unicode)
+        assert(isinstance(sender, str))
         self.mp['sender'] = sender
 
     def setRecipient(self, recipient):
@@ -181,11 +200,11 @@ class Message:
                     recipient = recipient[:N] + [last]
                 recipient = u', '.join(recipient[:-1]) + ' og ' + recipient[-1]
 
-        assert(type(recipient) == unicode)
+        assert(isinstance(recipient, str))
         self.mp['recipient'] = recipient
 
     def setCC(self, cc):
-        assert(type(cc) == unicode)
+        assert(isinstance(cc, str))
         self.mp['cc'] = cc
 
     def setMessageID(self, *mid):
@@ -194,8 +213,8 @@ class Message:
         assert(type(self.mp['mid']) == str)  # mid must be ascii
 
     def addAttachment(self, url, text):
-        assert(type(url) in [str, unicode])
-        assert(type(text) == unicode)
+        assert(isinstance(url, str))
+        assert(isinstance(text, str))
         self.mp['attatchments'].append((surllib.absurl(url), text))
 
     def setData(self, data):
@@ -213,7 +232,7 @@ class Message:
             txt = u' '.join([self.mp[x] for x in keys if self.mp.get(x, None)])
             if self.mp['attatchments']:
                 txt += ' '.join(text for _, text in self.mp['attatchments'])
-            self.mp['md5'] = md5.md5(txt.encode('utf-8')).hexdigest()
+            self.mp['md5'] = hashlib.md5(txt.encode('utf-8')).hexdigest()
 
     def getMessageID(self):
         '''Format: type--md5(--mid), e.g.,
@@ -257,12 +276,11 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
         os.mkdir(tdn)
 
         fd = open(os.path.join(tdn, mid + '.eml'), 'wb')
-        fd.write(str(self.asEmail()))
+        fd.write(self.asEmail().as_bytes())
         fd.close()
 
-        fd = open(os.path.join(tdn, mid + '.json'), 'wb')
-        json.dump(self.mp, fd, sort_keys=True, indent=2, default=unicode)
-        fd.close()
+        with open(os.path.join(tdn, mid + '.json'), 'w', encoding='utf-8') as fd:
+            json.dump(self.mp, fd, sort_keys=True, indent=2, default=str)
 
         os.rename(tdn, dn)
         return True
@@ -326,11 +344,11 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
             if url not in iimgs:
                 try:
                     data = surllib.skoleGetURL(url, False)
-                except urllib2.URLError:
+                except urllib.error.URLError:
                     # could not fetch URL for some reason - ignore
                     continue
                 # is this actually an image?
-                if not imghdr.what('', data):
+                if not _isImage(data):
                     continue  # ignore
                 cid = 'image%d-%f@%s' % (len(iimgs) + 1, time.time(), hostname)
                 iimgs[url] = (cid, data)
@@ -374,7 +392,7 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
                 data = None
                 try:
                     data = surllib.skoleGetURL(url, False)
-                except urllib2.URLError:
+                except urllib.error.URLError:
                     # unable to fetch URL
                     config.log(u'%s: Kan ikke hente flg. URL: %s' %
                                (self.mp['title'] if self.mp['title'] else self,
@@ -538,8 +556,8 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
                 server.starttls()
             except smtplib.SMTPException:
                 pass  # ok, but we tried...
-            server.login(config.options.smtpusername.encode('ascii'),
-                         config.options.smtppassword.encode('ascii'))
+            server.login(config.options.smtpusername,
+                         config.options.smtppassword)
 
         try:
             try:
