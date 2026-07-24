@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 
-import config
+from . import config
 import glob
+import hashlib
 import os
 import json
-import schildren
-import semail
-import surllib
-import md5
+from . import schildren
+from . import semail
+from . import surllib
 import re
 from datetime import datetime
 
@@ -19,7 +19,7 @@ def formatHomework(cname, bs):
     # Test if there is any homework
     if not bs.select('div.sk-white-box > b'):
         return '', ''
-    html = u''
+    html = ''
     homework_checksums = set()
     # First determine if some of the homework were sent earlier
     previouslySent = set()
@@ -37,10 +37,10 @@ def formatHomework(cname, bs):
     for li in bs.select('ul.sk-list > li'):
         # Locate header with due-dates
         header = li.find('div', 'sk-white-box').b.text
-        config.clog(cname, u'Fandt lektietitel: %r' % header, 3)
-        html_temp = u'<b>{0}</b>'.format(header)
-        html_temp += u'<table border="1" cellpadding="1" cellspacing="1">'
-        html_temp += u'<tbody>'
+        config.clog(cname, 'Fandt lektietitel: %r' % header, 3)
+        html_temp = '<b>{0}</b>'.format(header)
+        html_temp += '<table border="1" cellpadding="1" cellspacing="1">'
+        html_temp += '<tbody>'
         # Locate each table with homework
         table = li.find('table')
         for row in table.select('tbody tr'):
@@ -67,17 +67,17 @@ def formatHomework(cname, bs):
                 row.decompose()
             else:
                 html_temp += (
-                    u'<tr style="font-size:14px">'
-                    u'<td style="width:173">{0}:</td>'
-                    u'<td style="width:717">{1}</td>'
-                    u'</tr>').format(
+                    '<tr style="font-size:14px">'
+                    '<td style="width:173">{0}:</td>'
+                    '<td style="width:717">{1}</td>'
+                    '</tr>').format(
                         row.select_one(
                             'td:nth-of-type(1)').get_text(strip=True),
                         row.select_one(
                             'td:nth-of-type(2)').get_text(strip=True)
                 )
-        html_temp += u'</tbody></table><br>'
-        checksum = md5.md5(html_temp.encode('utf8')).hexdigest()
+        html_temp += '</tbody></table><br>'
+        checksum = hashlib.md5(html_temp.encode('utf8')).hexdigest()
         if checksum in previouslySent:
             # hvis lektien tidligere er sendt og har due-date i dag,
             # så undlad at sende
@@ -87,7 +87,7 @@ def formatHomework(cname, bs):
             else:
                 # Måned angivet fuldt ud ("Maj")
                 ft = '%A, %d. %b %Y:'
-            if datetime.strptime(header.encode('utf-8'), ft).date() == datetime.today().date():
+            if datetime.strptime(header, ft).date() == datetime.today().date():
                 continue
         homework_checksums.add(checksum)
         html_temp += html
@@ -106,7 +106,7 @@ def getHomework(cname, url):
 @config.Section(SECTION)
 def skoleHomework(cname):
     'Lektier'
-    config.clog(cname, u'Kigger efter nye lektier')
+    config.clog(cname, 'Kigger efter nye lektier')
     url = schildren.getChildURL(cname, 'item/weeklyplansandhomework/diary/')
 
     bs = surllib.skoleGetURL(url, True, noCache=True)
@@ -124,12 +124,12 @@ def skoleHomework(cname):
                 if homework and homework_checksums:
                     wid = url['href'].split('/')[-1]  # e.g. 35-2018
                     title = bs.find('h3').text.strip()
-                    msg = semail.Message(cname, SECTION, unicode(homework))
-                    msg.setTitle(unicode(title))
+                    msg = semail.Message(cname, SECTION, str(homework))
+                    msg.setTitle(str(title))
                     msg.setMessageID(wid)
                     msg.setData(list(homework_checksums))
                     msg.maybeSend()
     else:
-        if u'ikke autoriseret' in bs.text:
-            config.clog(cname, u'Din skole bruger ikke lektier. '
-                        u"Du bør bruge '--section ,-%s'" % SECTION)
+        if 'ikke autoriseret' in bs.text:
+            config.clog(cname, 'Din skole bruger ikke lektier. '
+                        "Du bør bruge '--section ,-%s'" % SECTION)

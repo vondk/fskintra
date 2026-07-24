@@ -2,11 +2,11 @@
 
 import json
 
-import config
-import sbs4
-import schildren
-import semail
-import surllib
+from . import config
+from . import sbs4
+from . import schildren
+from . import semail
+from . import surllib
 
 SECTION = 'doc'
 MAX_CACHE_AGE = .99
@@ -16,10 +16,10 @@ def docFindDocuments(cname, rootTitle, bs, title):
     '''Search a folder for new documents'''
     folder = rootTitle
     if title:
-        folder += u' / ' + title.replace(u'>', u'/')
+        folder += ' / ' + title.replace('>', '/')
 
     docs = bs.findAll('div', 'sk-document')
-    config.clog(cname, u'%s: %d dokumenter fundet ' %
+    config.clog(cname, '%s: %d dokumenter fundet ' %
                 (folder, len(docs)))
 
     for doc in docs:
@@ -36,19 +36,19 @@ def docFindDocuments(cname, rootTitle, bs, title):
         a = doc.find('a')
         url = a and a['href'] or ''
         if '.' in docTitle:
-            sfn = docTitle.rsplit(u'.', 1)[0]
+            sfn = docTitle.rsplit('.', 1)[0]
         else:
             sfn = docTitle
 
         if docTitle and docDate and url:
             # Create HTML snippet
-            html = u"<p>Nyt dokument: <span></span> / <b></b></p>\n"
-            html += u"<!-- Sidst opdateret: %s -->" % docDate
+            html = "<p>Nyt dokument: <span></span> / <b></b></p>\n"
+            html += "<!-- Sidst opdateret: %s -->" % docDate
             h = sbs4.beautify(html)
             h.span.string = folder
             h.b.string = docTitle
 
-            msg = semail.Message(cname, SECTION, unicode(h))
+            msg = semail.Message(cname, SECTION, str(h))
             msg.setTitle(sfn)
             msg.setDateTime(docDate)
             msg.addAttachment(url, docTitle)
@@ -60,7 +60,7 @@ def docFindDocuments(cname, rootTitle, bs, title):
 def skoleDocuments(cname):
     'Dokumenter'
     for rootTitle, folder in [('Klassens dokumenter', 'class')]:
-        config.clog(cname, u'%s: Kigger efter dokumenter' % rootTitle)
+        config.clog(cname, '%s: Kigger efter dokumenter' % rootTitle)
         url = schildren.getChildURL(cname, '/documents/' + folder)
 
         bs = surllib.skoleGetURL(url, True, MAX_CACHE_AGE)
@@ -72,11 +72,11 @@ def skoleDocuments(cname):
             sfs = json.loads(js['value'])
 
             for sf in sfs:
-                if sf[u'Name'].startswith('$'):
+                if sf['Name'].startswith('$'):
                     continue
 
-                title = sf[u'Title']
-                url = sf[u'Url']
+                title = sf['Title']
+                url = sf['Url']
                 bs = surllib.skoleGetURL(url, True, MAX_CACHE_AGE, None, True)
 
                 docFindDocuments(cname, rootTitle, bs, title)

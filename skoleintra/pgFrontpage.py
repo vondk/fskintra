@@ -4,11 +4,11 @@ import collections
 import re
 import time
 
-import config
-import sbs4
-import schildren
-import semail
-import surllib
+from . import config
+from . import sbs4
+from . import schildren
+from . import semail
+from . import surllib
 
 SECTION = 'frp'
 
@@ -17,21 +17,21 @@ def parseFrontpageItem(cname, div):
     '''Parse a single frontpage news item'''
     # Do we have any comments?
     comments = div.find('div', 'sk-news-item-comments')
-    cdiv = u''
+    cdiv = ''
     if comments:
         global c
         # Comments are enabled
         txt = comments.text.strip()
-        if u'tilføj' not in txt.lower():
-            m = re.match(ur'.*vis (\d+) kommentar.*', txt.lower())
+        if 'tilføj' not in txt.lower():
+            m = re.match(r'.*vis (\d+) kommentar.*', txt.lower())
             assert(m)
             nc = int(m.group(1))
             if nc > 0:
                 suff = '/news/pins/%s/comments' % div['data-feed-item-id']
                 url = schildren.getChildURL(cname, suff)
                 bs = surllib.skoleGetURL(url, asSoup=True, postData={'_': str(nc)})
-                cdiv = unicode(bs.find('div', 'sk-comments-container'))
-                cdiv = u'<br>' + cdiv
+                cdiv = str(bs.find('div', 'sk-comments-container'))
+                cdiv = '<br>' + cdiv
 
     author = div.find('div', 'sk-news-item-author')
     body = div.find('div', 'sk-news-item-content')
@@ -43,21 +43,21 @@ def parseFrontpageItem(cname, div):
         e['style'] = 'font-weight: bold'
     for e in body.select('div'):
         # remove empty divs
-        contents = u''.join(map(unicode, e.children)).strip()
+        contents = ''.join(map(str, e.children)).strip()
         if not contents:
             e.extract()
     # Trim extra white space - sometimes unecessary linebreaks are introduced
     sbs4.trimSoup(body)
 
-    msg = semail.Message(cname, SECTION, unicode(body)+cdiv)
+    msg = semail.Message(cname, SECTION, str(body)+cdiv)
 
     for e in body.select('span, strong, b, i'):
         e.unwrap()
     sbs4.condenseSoup(body)
 
-    title = body.get_text(u'\n', strip=True).strip().split(u'\n')[0]
-    title = title.replace(u'\xa0', u' ').strip()
-    title = u' '.join(title.rstrip(u' .').split())
+    title = body.get_text('\n', strip=True).strip().split('\n')[0]
+    title = title.replace('\xa0', ' ').strip()
+    title = ' '.join(title.rstrip(' .').split())
 
     msg.setTitle(title, True)
     msg.setMessageID(div['data-feed-item-id'])
@@ -72,13 +72,13 @@ def parseFrontpageItem(cname, div):
             author.find('a', 'sk-news-show-more-link')]:
         if tag:
             tag.extract()
-    recp = re.sub(ur'\s*(,| og )\s*', ',', author.text.strip())
-    recp = recp.split(u',')
+    recp = re.sub(r'\s*(,| og )\s*', ',', author.text.strip())
+    recp = recp.split(',')
     msg.setRecipient(recp)
 
     myDateTime = div.find('div', 'sk-news-item-timestamp').text
-    myDateTime = myDateTime.replace(u'\xa0', u'')
-    myDateTime = myDateTime.partition(u'opdateret')[0].strip()
+    myDateTime = myDateTime.replace('\xa0', '')
+    myDateTime = myDateTime.partition('opdateret')[0].strip()
     msg.setDateTime(myDateTime)
 
     # Do we have any attachments?
@@ -101,29 +101,29 @@ def parseFrontpage(cname, bs):
     if ul:
         for li in ul.findAll('li', recursive=False):
             for c in li.contents:
-                uc = unicode(c).strip().lower()
+                uc = str(c).strip().lower()
                 if not uc:
                     continue
-                if u'har fødselsdag' in uc:
-                    today = unicode(time.strftime(u'%d. %b. %Y'))
-                    c.append(u" \U0001F1E9\U0001F1F0")  # Unicode DK Flag
+                if 'har fødselsdag' in uc:
+                    today = str(time.strftime('%d. %b. %Y'))
+                    c.append(" \U0001F1E9\U0001F1F0")  # Unicode DK Flag
                     sbs4.appendTodayComment(c)
-                    msg = semail.Message(cname, SECTION, unicode(c))
+                    msg = semail.Message(cname, SECTION, str(c))
                     msg.setTitle(c.text.strip())
                     msg.setDateTime(today)
 
                     msgs.append(msg)
-                elif u'der er aktiviteter i dag' in uc:
+                elif 'der er aktiviteter i dag' in uc:
                     continue  # ignore
                 else:
-                    config.clog(cname, u'Hopper mini-besked %r over' %
+                    config.clog(cname, 'Hopper mini-besked %r over' %
                                 c.text.strip(), 2)
 
     # Find interesting main front page items
     fps = bs.findAll('div', 'sk-news-item')
     if len(fps) == 0:
         # no items on the main front page?
-        config.clog(cname, u'Der er ikke ingen nyheder på forsiden?', 2)
+        config.clog(cname, 'Der er ikke ingen nyheder på forsiden?', 2)
 
     for div in fps[::-1]:
         msg = parseFrontpageItem(cname, div)
@@ -135,7 +135,7 @@ def parseFrontpage(cname, bs):
 def getMsgsForChild(cname):
     '''Look for new frontpage news'''
     url = schildren.getChildURL(cname, '/Index')
-    config.clog(cname, u'Behandler forsiden %s' % url)
+    config.clog(cname, 'Behandler forsiden %s' % url)
     bs = surllib.skoleGetURL(url, asSoup=True, noCache=True)
 
     return parseFrontpage(cname, bs)
@@ -149,14 +149,14 @@ def skoleFrontpage(cnames):
         for msg in getMsgsForChild(cname):
             if msg.hasBeenSent():
                 continue
-            config.clog(cname, u'Ny besked fundet: %s' % msg.mp['title'], 2)
+            config.clog(cname, 'Ny besked fundet: %s' % msg.mp['title'], 2)
             mid = msg.getLongMessageID()
             if mid in msgs:
                 msgs[mid].addChild(cname)
             else:
                 msgs[mid] = msg
 
-    for mid, msg in msgs.items():
+    for mid, msg in list(msgs.items()):
         cname = ','.join(msg.mp['children'])
-        config.clog(cname, u'Sender ny besked: %s' % msg.mp['title'], 2)
+        config.clog(cname, 'Sender ny besked: %s' % msg.mp['title'], 2)
         msg.maybeSend()

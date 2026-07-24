@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
-import cgi
-import cookielib
+import http.cookiejar
 import datetime
 import mechanize
 import hashlib
@@ -9,13 +8,13 @@ import os
 import re
 import sys
 import time
-import urllib
-import urllib2
-import urlparse
+import urllib.request
+import urllib.parse
+import urllib.error
 
-import config
-import sbs4
-import pgConfirm
+from . import config
+from . import sbs4
+from . import pgConfirm
 
 
 def absurl(url):
@@ -27,7 +26,7 @@ def absurl(url):
 
 def unienc(s):
     '''Ensure that s is encoded as a binary string (not unicode)'''
-    if type(s) == unicode:
+    if type(s) == str:
         return s.encode('utf-8')
     else:
         return s
@@ -38,7 +37,7 @@ class Browser(mechanize.Browser):
         mechanize.Browser.__init__(self)
 
         # Cookie Jar
-        self._cj = cookielib.LWPCookieJar()
+        self._cj = http.cookiejar.LWPCookieJar()
         self.set_cookiejar(self._cj)
 
         # Browser options
@@ -79,7 +78,7 @@ class Browser(mechanize.Browser):
         sfn = self._browser_state_filename()
         if os.path.isfile(sfn):
             if not config.options.skipcache:
-                config.log(u'Henter tidligere browsertilstand fra %s' % sfn, 2)
+                config.log('Henter tidligere browsertilstand fra %s' % sfn, 2)
                 self._cj.load(sfn, True, True)
                 for st in open(sfn).read().strip().split('\n'):
                     sp = st.split()
@@ -92,8 +91,8 @@ class Browser(mechanize.Browser):
                 if self.state['header']:
                     self.addheaders = self.state['header']
             else:
-                config.log(u'Indlæser ikke tidligere browsertilstand '
-                           u'fra %s pga --skipcache' % sfn)
+                config.log('Indlæser ikke tidligere browsertilstand '
+                           'fra %s pga --skipcache' % sfn)
 
     def _browser_state_filename(self):
         fn = '%s-%s.state' % (config.options.hostname, config.options.username)
@@ -115,7 +114,7 @@ class Browser(mechanize.Browser):
 
     def open(self, url, *args, **aargs):
         ofp, self.firstPass = self.firstPass, False
-        if type(url) in [str, unicode]:
+        if type(url) in [str, str]:
             furl = url
         else:
             furl = url.get_full_url()
@@ -167,36 +166,36 @@ def skoleLogin():
         return _skole_login_done
 
     br = getBrowser()
-    config.log(u'Login', 2)
+    config.log('Login', 2)
 
-    config.log(u'Log ind på ForældreIntra')
+    config.log('Log ind på ForældreIntra')
     url = absurl('/Account/IdpLogin')
     if br.getState('index'):
         url = br.getState('index')
-        config.log(u'Genbruger sidst kendte forside URL %s' % url, 2)
+        config.log('Genbruger sidst kendte forside URL %s' % url, 2)
     else:
-        config.log(u'Logger på via %s' % url, 2)
+        config.log('Logger på via %s' % url, 2)
 
     try:
         resp = br.open(url)
-    except urllib2.HTTPError as e:
-        config.log(u'skoleLogin: Kan ikke logge på ForældreIntra?', -1)
-        config.log(u'skoleLogin: URL: %s' % url, -1)
-        config.log(u'skoleLogin: Fejlkode: %d' % e.code, -1)
+    except urllib.error.HTTPError as e:
+        config.log('skoleLogin: Kan ikke logge på ForældreIntra?', -1)
+        config.log('skoleLogin: URL: %s' % url, -1)
+        config.log('skoleLogin: Fejlkode: %d' % e.code, -1)
         if e.code == 404 and not br.getState('index'):
             # Login tried at the default URL
-            config.log(u'skoleLogin: Bruger du det rette `hostname` til det '
-                       u'nye ForældreIntra i konfigurationsfilen?', -1)
+            config.log('skoleLogin: Bruger du det rette `hostname` til det '
+                       'nye ForældreIntra i konfigurationsfilen?', -1)
 
-        config.log(u'skoleLogin: Check at URLen er rigtig '
-                   u'og prøv evt. igen senere', -1)
+        config.log('skoleLogin: Check at URLen er rigtig '
+                   'og prøv evt. igen senere', -1)
         sys.exit(1)
 
     N = 6
     for round in range(N):  # try at most N times before failing
         url = resp.geturl()
         data = resp.read()
-        config.log(u'Log ind skridt %d/%d: %s' % (round + 1, N, url), 3)
+        config.log('Log ind skridt %d/%d: %s' % (round + 1, N, url), 3)
 
         forms = list(br.forms())
         if len(forms) == 1:
@@ -204,7 +203,7 @@ def skoleLogin():
 
         if url.endswith('/ConfirmContacts'):
             # Confirm contact details
-            config.log(u'Bekræfter kontaktoplysninger på %s' % url, 1)
+            config.log('Bekræfter kontaktoplysninger på %s' % url, 1)
             pgConfirm.skoleConfirm(sbs4.beautify(data))
             # Click "Bekræft"
             for form in br.forms():
@@ -212,7 +211,7 @@ def skoleLogin():
                     br.form = form
                     break
             else:
-                config.log(u'Kunne ikke bekræfte kontaktoplysninger på %s'
+                config.log('Kunne ikke bekræfte kontaktoplysninger på %s'
                            % url, -1)
                 sys.exit(1)
             resp = br.submit(nr=0)
@@ -220,7 +219,7 @@ def skoleLogin():
 
         if url == br.getState('index') and data:
             # we are fine / logged in
-            config.log(u'Succesfuldt log ind til %s' % url, 2)
+            config.log('Succesfuldt log ind til %s' % url, 2)
             _skole_login_done = sbs4.beautify(data)
             return _skole_login_done
 
@@ -232,15 +231,15 @@ def skoleLogin():
             continue
 
         if url.startswith('https://login.emu.dk/'):
-            config.log(u'Uni-login med brugernavn %r' %
+            config.log('Uni-login med brugernavn %r' %
                        config.options.username, 3)
 
             if 'forkert brugernavn' in data.lower():
-                config.log(u'Log ind giver en fejlmeddelse -- '
-                           u'har du angivet korrekt kodeord?')
-                config.log(u'Check konfigurationsfilen, angiv evt. nyt '
-                           u'kodeord med --password eller --config ELLER '
-                           u'prøv igen senere...', -2)
+                config.log('Log ind giver en fejlmeddelse -- '
+                           'har du angivet korrekt kodeord?')
+                config.log('Check konfigurationsfilen, angiv evt. nyt '
+                           'kodeord med --password eller --config ELLER '
+                           'prøv igen senere...', -2)
                 sys.exit(1)
 
             assert(config.options.logintype != 'alm')  # This must be uni login
@@ -249,24 +248,24 @@ def skoleLogin():
                     br.form = form
                     break
             else:
-                config.log(u'Kunne ikke finde logind formular på %s' % url, -1)
-                config.log(u'Måske er Javascript logind beskyttelse '
-                           u'slået til? Prøv igen senere eller se '
-                           u'https://svalgaard.github.io/fskintra/'
-                           u'troubleshooting', -1)
+                config.log('Kunne ikke finde logind formular på %s' % url, -1)
+                config.log('Måske er Javascript logind beskyttelse '
+                           'slået til? Prøv igen senere eller se '
+                           'https://svalgaard.github.io/fskintra/'
+                           'troubleshooting', -1)
                 sys.exit(1)
             br['user'] = config.options.username
             br['pass'] = config.options.password
             resp = br.submit()
             continue
 
-        if urlparse.urlparse(resp.geturl()).path == '/Account/IdpLogin':
+        if urllib.parse.urlparse(resp.geturl()).path == '/Account/IdpLogin':
             if 'ikke adgang' in data:
-                config.log(u'Log ind giver en fejlmeddelse -- '
-                           u'har du angivet korrekt kodeord?')
-                config.log(u'Check konfigurationsfilen, angiv evt. nyt '
-                           u'kodeord med --password eller --config ELLER '
-                           u'prøv igen senere...', -2)
+                config.log('Log ind giver en fejlmeddelse -- '
+                           'har du angivet korrekt kodeord?')
+                config.log('Check konfigurationsfilen, angiv evt. nyt '
+                           'kodeord med --password eller --config ELLER '
+                           'prøv igen senere...', -2)
                 sys.exit(1)
 
             # This is the main login page
@@ -275,33 +274,33 @@ def skoleLogin():
                 links = list(br.links(url_regex=re.compile(
                     '.*RedirectToUniLogin.*')))
                 if not links:
-                    config.log(u'Kan IKKE finde LOG PÅ MED UNILOGIN '
-                               u'linket på siden?', -1)
+                    config.log('Kan IKKE finde LOG PÅ MED UNILOGIN '
+                               'linket på siden?', -1)
                     sys.exit(1)
-                config.log(u'Går videre til uni-login', 3)
+                config.log('Går videre til uni-login', 3)
                 resp = br.follow_link(links[0])
                 continue
             else:
-                config.log(u'Bruger alm. login med brugernavn %r' %
+                config.log('Bruger alm. login med brugernavn %r' %
                            config.options.username, 3)
                 # "Ordinary login"
                 try:
                     br['UserName'] = config.options.username
                     br['Password'] = config.options.password
                 except mechanize.ControlNotFoundError:
-                    config.log(u'Kan IKKE finde ALM LOGIN på siden.', -1)
-                    config.log(u'Skal du måske bruge unilogin i stedet?', -1)
+                    config.log('Kan IKKE finde ALM LOGIN på siden.', -1)
+                    config.log('Skal du måske bruge unilogin i stedet?', -1)
                     sys.exit(1)
 
                 resp = br.submit()
                 continue
         break
 
-    config.log(u'skoleLogin: Kan ikke logge på ForældreIntra?', -1)
-    config.log(u'skoleLogin: Vi var nået til flg URL', -1)
-    config.log(u'skoleLogin: %s' % url, -1)
-    config.log(u'skoleLogin: Check at URLen er rigtig '
-               u'og prøv evt. igen senere', -1)
+    config.log('skoleLogin: Kan ikke logge på ForældreIntra?', -1)
+    config.log('skoleLogin: Vi var nået til flg URL', -1)
+    config.log('skoleLogin: %s' % url, -1)
+    config.log('skoleLogin: Check at URLen er rigtig '
+               'og prøv evt. igen senere', -1)
     sys.exit(0)
 
 
@@ -310,9 +309,9 @@ def url2cacheFileName(url, postData):
     assert(type(url) == str)
     if postData:
         url += postData
-    up = urlparse.urlparse(url)
-    p = urllib.url2pathname(up.path)
-    p = p.decode('utf-8', 'replace').replace(u'\ufffd', '_')
+    up = urllib.parse.urlparse(url)
+    p = urllib.request.url2pathname(up.path)
+    p = p.replace('\ufffd', '_')
     parts = [config.options.cachedir,
              up.scheme,
              up.netloc,
@@ -320,17 +319,17 @@ def url2cacheFileName(url, postData):
     if up.query:
         qq = ''
         az = re.compile(r'[^0-9a-zA-Z]')
-        for (k, vs) in sorted(cgi.parse_qs(up.query).items()):
+        for (k, vs) in sorted(urllib.parse.parse_qs(up.query).items()):
             xs = [az.sub(lambda x: hex(ord(x.group(0))), x) for x in [k] + vs]
             qq += '_' + '-'.join(xs)
         if len(qq) > 32:
             # Some queries are too long - this may fail when writing to disk
-            qq = '_' + hashlib.md5(qq).hexdigest()
+            qq = '_' + hashlib.md5(qq.encode('utf-8')).hexdigest()
         parts[-1] += qq
 
     cfn = os.path.join(*parts)
     cfn = cfn.replace('\\', '/')
-    if type(cfn) == unicode and not os.path.supports_unicode_filenames:
+    if type(cfn) == str and not os.path.supports_unicode_filenames:
         cfn = cfn.encode('utf-8')
     return cfn
 
@@ -349,18 +348,17 @@ def skoleGetURL(url, asSoup=False, noCache=False, postData=None,
         else:
             return data
 
-    if type(url) == unicode:
-        url, uurl = url.encode('utf-8'), url
-    else:
-        uurl = url.decode('utf-8')
+    if type(url) == bytes:
+        url = url.decode('utf-8')
+    uurl = url
     if url.startswith('/'):
         url = absurl(url)
 
     if type(postData) == dict:
         pd = {}
-        for (k, v) in postData.items():
+        for (k, v) in list(postData.items()):
             pd[unienc(k)] = unienc(v)
-        postData = urllib.urlencode(pd)
+        postData = urllib.parse.urlencode(pd)
     else:
         postData = unienc(postData)
 
@@ -377,8 +375,8 @@ def skoleGetURL(url, asSoup=False, noCache=False, postData=None,
             noCache = False
 
     if os.path.isfile(lfn) and not noCache and not config.options.skipcache:
-        config.log(u'skoleGetURL: Henter fra cache %s' % uurl, 2)
-        config.log(u'skoleGetURL: %r' % lfn, 2)
+        config.log('skoleGetURL: Henter fra cache %s' % uurl, 2)
+        config.log('skoleGetURL: %r' % lfn, 2)
         data = open(lfn, 'rb').read()
     else:
         if addTimeSuffix:
@@ -386,8 +384,8 @@ def skoleGetURL(url, asSoup=False, noCache=False, postData=None,
                 url += '&_=' + str(int(time.time()*1000))
             else:
                 url += '?_=' + str(int(time.time()*1000))
-        qurl = urllib.quote(url, safe=':/?=&%')
-        config.log(u'skoleGetURL: Prøver at hente %s' % qurl, 2)
+        qurl = urllib.parse.quote(url, safe=':/?=&%')
+        config.log('skoleGetURL: Prøver at hente %s' % qurl, 2)
         skoleLogin()
         br = getBrowser()
         resp = br.open(qurl, postData)
@@ -397,7 +395,7 @@ def skoleGetURL(url, asSoup=False, noCache=False, postData=None,
         if not os.path.isdir(ldn):
             os.makedirs(ldn)
         open(lfn, 'wb').write(data)
-        config.log(u'skoleGetURL: Gemmer siden i filen %r' % lfn, 2)
+        config.log('skoleGetURL: Gemmer siden i filen %r' % lfn, 2)
 
     if asSoup:
         data = sbs4.beautify(data)

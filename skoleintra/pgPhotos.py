@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 
 import glob
+import hashlib
 import json
-import md5
 import os
 
-import config
-import sbs4
-import schildren
-import semail
-import surllib
+from . import config
+from . import sbs4
+from . import schildren
+from . import semail
+from . import surllib
 
 SECTION = 'pht'
 MAX_CACHE_AGE = .99
@@ -48,18 +48,18 @@ def sendPhotos(cname, title, mid, photos):
         del pending[:PHOTOS_PER_EMAIL]
 
         # Create HTML snippet
-        itag = u'<img style="max-width: 100%">'
-        ebs = sbs4.beautify(u'<h2></h2><p>%s</p>' %
-                            u'<br/>'.join([itag] * len(pics)))
+        itag = '<img style="max-width: 100%">'
+        ebs = sbs4.beautify('<h2></h2><p>%s</p>' %
+                            '<br/>'.join([itag] * len(pics)))
         ebs.h2.string = title
         for i, img in enumerate(ebs.select('img')):
             img['src'] = pics[i]
 
-        msg = semail.Message(cname, SECTION, unicode(ebs))
+        msg = semail.Message(cname, SECTION, str(ebs))
         if ecount > 1:
-            msg.setTitle(u'Billeder: %s (%d/%d)' % (title, ei+1, ecount))
+            msg.setTitle('Billeder: %s (%d/%d)' % (title, ei+1, ecount))
         else:
-            msg.setTitle(u'Billeder: %s' % title)
+            msg.setTitle('Billeder: %s' % title)
         msg.setMessageID(mid)
         msg.setData(pics)
         msg.maybeSend()
@@ -68,7 +68,7 @@ def sendPhotos(cname, title, mid, photos):
 def findPhotosInFolder(cname, url, bs):
     '''Search a folder for new photos'''
     title = bs.h2.text.strip()
-    mid = md5.md5(url.encode('utf-8')).hexdigest()[::2]
+    mid = hashlib.md5(url.encode('utf-8')).hexdigest()[::2]
     photos = []
 
     for img in bs.select('img'):
@@ -77,9 +77,9 @@ def findPhotosInFolder(cname, url, bs):
         url = surllib.absurl(img['src'])
         photos.append(url)
 
-    ptext = u'%d billeder' % len(photos) if len(photos) != 1 else '1 billede'
+    ptext = '%d billeder' % len(photos) if len(photos) != 1 else '1 billede'
 
-    config.clog(cname, u'Billeder: %s: %s' % (title, ptext))
+    config.clog(cname, 'Billeder: %s: %s' % (title, ptext))
 
     if not photos:
         return
@@ -96,7 +96,7 @@ def findPhotos(cname, bs):
         url = surllib.absurl(opt['value'])
         folder = opt.text.strip()
         if not url.startswith(prefix):
-            config.clog(cname, u'Billeder: %s: ukendt URL %r' %
+            config.clog(cname, 'Billeder: %s: ukendt URL %r' %
                         (folder, opt['value']))
             continue
 
@@ -110,5 +110,5 @@ def skolePhotos(cname):
     url = schildren.getChildURL(cname, '/photos/archives')
     bs = surllib.skoleGetURL(url, True, MAX_CACHE_AGE)
 
-    config.clog(cname, u'Kigger efter billeder')
+    config.clog(cname, 'Kigger efter billeder')
     findPhotos(cname, bs)

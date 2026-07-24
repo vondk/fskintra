@@ -6,8 +6,8 @@
 #
 # skoleConfirm is called from surllib
 
-import sbs4
-import semail
+from . import sbs4
+from . import semail
 
 
 def skoleConfirm(bs):
@@ -25,9 +25,9 @@ Do not actually click the confirm link. This is done in surllib.'''
         st = li.text
         s = st.split() if st else []
         if len(s) >= 2 and s[0].lower().startswith('elev:'):
-            cnames.append(unicode(s[1]))
+            cnames.append(str(s[1]))
             if len(s) >= 3:
-                cnames[-1] += u' %s' % s[-1]
+                cnames[-1] += ' %s' % s[-1]
     if not cnames:
         cnames.append('fskintra')
 
@@ -49,7 +49,7 @@ Do not actually click the confirm link. This is done in surllib.'''
         del form[att]
     sbs4.appendTodayComment(form)
 
-    msg = semail.Message(cnames[0], 'con', unicode(form))
+    msg = semail.Message(cnames[0], 'con', str(form))
     for cname in cnames[1:]:
         msg.addChild(cname)
     msg.setTitle(bs.h2.text)

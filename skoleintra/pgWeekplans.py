@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 
-import config
-import sbs4
-import schildren
-import semail
-import surllib
+from . import config
+from . import sbs4
+from . import schildren
+from . import semail
+from . import surllib
 
 
 SECTION = 'pln'
@@ -61,7 +61,7 @@ def getWeekplan(cname, url):
 @config.Section(SECTION)
 def skoleWeekplans(cname):
     'Ugeplaner'
-    config.clog(cname, u'Kigger efter nye ugeplaner')
+    config.clog(cname, 'Kigger efter nye ugeplaner')
     url = schildren.getChildURL(cname, 'item/weeklyplansandhomework/list/')
 
     bs = surllib.skoleGetURL(url, True, noCache=True)
@@ -76,11 +76,11 @@ def skoleWeekplans(cname):
             wid = url.split('/')[-1]  # e.g. 35-2018
             title = plan.find('h3').text.strip()
 
-            msg = semail.Message(cname, SECTION, unicode(plan))
+            msg = semail.Message(cname, SECTION, str(plan))
             msg.setTitle(title)
             msg.setMessageID(wid)
             msg.maybeSend()
     else:
-        if u'ikke autoriseret' in bs.text:
-            config.clog(cname, u'Din skole bruger ikke ugeplaner. '
-                        u"Du bør bruge '--section ,-%s'" % SECTION)
+        if 'ikke autoriseret' in bs.text:
+            config.clog(cname, 'Din skole bruger ikke ugeplaner. '
+                        "Du bør bruge '--section ,-%s'" % SECTION)

@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 
-import config
-import sbs4
-import schildren
-import semail
-import surllib
+from . import config
+from . import sbs4
+from . import schildren
+from . import semail
+from . import surllib
 
 SECTION = 'ctc'
 MAX_CACHE_AGE = 6.9
@@ -60,7 +60,7 @@ def contactCard(cname, bs):
         if photob:
             photob.decompose()
 
-    msg = semail.Message(cname, SECTION, unicode(bs))
+    msg = semail.Message(cname, SECTION, str(bs))
     msg.setTitle(name)
     msg.setMessageID(bs.url.split('/')[-1])
     msg.maybeSend()
@@ -69,14 +69,14 @@ def contactCard(cname, bs):
 @config.Section(SECTION)
 def skoleContacts(cname):
     'Kontaktinformation'
-    config.clog(cname, u'Kigger efter ny kontaktinformation')
+    config.clog(cname, 'Kigger efter ny kontaktinformation')
     url = schildren.getChildURL(cname, '/contacts/students/cards')
 
     bs = surllib.skoleGetURL(url, True, MAX_CACHE_AGE)
 
     opts = bs.select('#sk-toolbar-contact-dropdown option')
     if not opts:
-        config.clog(cname, u'Kan ikke finde nogen elever?')
+        config.clog(cname, 'Kan ikke finde nogen elever?')
         return
 
     for opt in opts:

@@ -2,8 +2,8 @@
 
 import re
 
-import config
-import surllib
+from . import config
+from . import surllib
 
 # Map of children => urlPrefix
 # 'Andrea 0A' => '/parent/1234/Andrea/'
@@ -20,7 +20,7 @@ def getChildren():
         _children = dict()
         seen = set()
 
-        config.log(u'Henter liste af børn')
+        config.log('Henter liste af børn')
         data = surllib.skoleLogin()
 
         # Name of "First child"
@@ -33,12 +33,12 @@ def getChildren():
             seen.add(url)
             name = a.text.strip() or fst
             if name not in _children:
-                config.log(u'Barn %s => %s' % (name, url), 2)
+                config.log('Barn %s => %s' % (name, url), 2)
                 _children[name] = url
-        cns = sorted(_children.keys(), key=ckey)
-        config.log(u'Følgende børn blev fundet: ' + u', '.join(cns))
+        cns = sorted(list(_children.keys()), key=ckey)
+        config.log('Følgende børn blev fundet: ' + ', '.join(cns))
 
-    return sorted(_children.keys(), key=ckey)
+    return sorted(list(_children.keys()), key=ckey)
 
 
 def getChildURLPrefix(cname):

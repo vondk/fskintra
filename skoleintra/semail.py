@@ -1,23 +1,25 @@
 # -*- coding: utf-8 -*-
 
 import glob
+import hashlib
 import imghdr
 import json
-import md5
 import mimetypes
 import os
 import shutil
 import smtplib
 import socket
-import urllib
-import urllib2
+import urllib.request
+import urllib.parse
+import urllib.error
 import time
 
-import config
-import sbs4
-import surllib
+from . import config
+from . import sbs4
+from . import surllib
 
 import email
+import email.charset
 from email import encoders
 from email.header import Header
 from email.mime.audio import MIMEAudio
@@ -26,12 +28,12 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
 # Set quoted-printable as default (instead of base64)
-email.Charset.add_charset('utf-8', email.Charset.QP, email.Charset.QP, 'utf-8')
+email.charset.add_charset('utf-8', email.charset.QP, email.charset.QP, 'utf-8')
 
 
 def headerEncodeField(f, maxlinelen=40):
     '''Encode text suitable as a quoted-printable header'''
-    if type(f) == str:
+    if type(f) == bytes:
         try:
             f = f.decode('utf-8')
         except UnicodeDecodeError:
@@ -46,7 +48,7 @@ def headerEncodeField(f, maxlinelen=40):
 
 def niceFilename(fn):
     '''Turn fn (probably an URL) into an (attachment) filename'''
-    fn = urllib.unquote(fn).replace('\\', '/')
+    fn = urllib.parse.unquote(fn).replace('\\', '/')
     fn = os.path.basename(fn)
     fn = fn.split('?')[0]
     return fn
@@ -73,6 +75,8 @@ def generateMIMEAttachment(path, data, usefilename=None):
     maintype, subtype = ctype.split('/', 1)
     if maintype == 'text':
         # Note: we should handle calculating the charset
+        if isinstance(data, bytes):
+            data = data.decode('utf-8', 'replace')
         msg = MIMEText(data, _subtype=subtype)
     elif maintype == 'image':
         msg = MIMEImage(data, _subtype=subtype)
@@ -86,7 +90,7 @@ def generateMIMEAttachment(path, data, usefilename=None):
     # do not do this here - already done above.
     # encoders.encode_base64(msg)
     # Set the filename parameter
-    if type(fn) != unicode:
+    if type(fn) != str:
         fn = fn.decode('utf-8')
     fne = headerEncodeField(fn)
     msg.add_header('Content-Disposition', 'attachment', filename=fne)
@@ -98,11 +102,11 @@ class Message:
     def __init__(self, cname, tp, html):
         self.mp = {}
 
-        assert(type(cname) == unicode and cname)
+        assert(type(cname) == str and cname)
         self.mp['children'] = [cname]
         assert(type(tp) == str and len(tp) == 3)
         self.mp['type'] = tp  # msg or ...
-        assert(type(html) == unicode)
+        assert(type(html) == str)
         self.mp['html'] = html  # html content
 
         self.mp['title'] = None
@@ -122,22 +126,22 @@ class Message:
         self._email = None
 
     def __repr__(self):
-        txt = u'<semail.Message'
+        txt = '<semail.Message'
         keys = 'type,mid,date,title,sender'.split(',')
         for key in keys:
             if self.mp.get(key):
-                txt += u' %s=%s' % (key, repr(self.mp[key]))
-        txt += u'>'
+                txt += ' %s=%s' % (key, repr(self.mp[key]))
+        txt += '>'
         return txt
 
     def setTitle(self, title, shorten=False):
-        assert(type(title) == unicode)
+        assert(type(title) == str)
         if shorten and len(title) > 40:
             title = title[:40] + title[40:].split(' ', 2)[0] + '...'
         self.mp['title'] = title
 
     def addChild(self, cname):
-        assert(type(cname) == unicode and cname)
+        assert(type(cname) == str and cname)
         if cname not in self.mp['children']:
             self.mp['children'].append(cname)
 
@@ -145,7 +149,7 @@ class Message:
         return self.mp['children'][:]
 
     def setDateTime(self, dt):
-        assert(type(dt) == unicode)
+        assert(type(dt) == str)
         ts = time.localtime()  # Use NOW by default
 
         dt2 = dt.split(',')[-1].strip().replace('.', '')
@@ -155,7 +159,7 @@ class Message:
             # 25. jun. 2018 16:26
             ts = time.strptime(dt2, '%d %b %Y %H:%M')
         except ValueError:
-            config.log(u'Ukendt tidsstempel %r' % dt, -1)
+            config.log('Ukendt tidsstempel %r' % dt, -1)
             assert(False)  # FIXME We should never be here
 
         self.mp['date_string'] = dt
@@ -164,7 +168,7 @@ class Message:
         self.mp['date-set'] = True
 
     def setSender(self, sender):
-        assert(type(sender) == unicode)
+        assert(type(sender) == str)
         self.mp['sender'] = sender
 
     def setRecipient(self, recipient):
@@ -177,15 +181,15 @@ class Message:
                 recipient = recipient[0]
             else:
                 if len(recipient) > N + 1:
-                    last = u'%d andre' % (len(recipient)-N)
+                    last = '%d andre' % (len(recipient)-N)
                     recipient = recipient[:N] + [last]
-                recipient = u', '.join(recipient[:-1]) + ' og ' + recipient[-1]
+                recipient = ', '.join(recipient[:-1]) + ' og ' + recipient[-1]
 
-        assert(type(recipient) == unicode)
+        assert(type(recipient) == str)
         self.mp['recipient'] = recipient
 
     def setCC(self, cc):
-        assert(type(cc) == unicode)
+        assert(type(cc) == str)
         self.mp['cc'] = cc
 
     def setMessageID(self, *mid):
@@ -194,8 +198,8 @@ class Message:
         assert(type(self.mp['mid']) == str)  # mid must be ascii
 
     def addAttachment(self, url, text):
-        assert(type(url) in [str, unicode])
-        assert(type(text) == unicode)
+        assert(type(url) in [str, str])
+        assert(type(text) == str)
         self.mp['attatchments'].append((surllib.absurl(url), text))
 
     def setData(self, data):
@@ -210,10 +214,10 @@ class Message:
             keys = 'type,date,title,html'.split(',')
             if not self.mp['date-set']:
                 keys.remove('date')
-            txt = u' '.join([self.mp[x] for x in keys if self.mp.get(x, None)])
+            txt = ' '.join([self.mp[x] for x in keys if self.mp.get(x, None)])
             if self.mp['attatchments']:
                 txt += ' '.join(text for _, text in self.mp['attatchments'])
-            self.mp['md5'] = md5.md5(txt.encode('utf-8')).hexdigest()
+            self.mp['md5'] = hashlib.md5(txt.encode('utf-8')).hexdigest()
 
     def getMessageID(self):
         '''Format: type--md5(--mid), e.g.,
@@ -251,7 +255,7 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
             return False
         tdn = dn + '.tmp'
         if os.path.isdir(tdn):
-            config.log(u'Fjerner tidligere midlertidigt bibliotek %r' %
+            config.log('Fjerner tidligere midlertidigt bibliotek %r' %
                        tdn, 2)
             shutil.rmtree(tdn)  # Remove stuff
         os.mkdir(tdn)
@@ -261,7 +265,7 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
         fd.close()
 
         fd = open(os.path.join(tdn, mid + '.json'), 'wb')
-        json.dump(self.mp, fd, sort_keys=True, indent=2, default=unicode)
+        json.dump(self.mp, fd, sort_keys=True, indent=2, default=str)
         fd.close()
 
         os.rename(tdn, dn)
@@ -277,13 +281,13 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
 
         def wrapOrZap(key, title, tag=''):
             if title:
-                title += u': '
+                title += ': '
             val = mpp.get(key, None)
             if val:
                 if tag:
-                    val = u'<%s>%s</%s>' % (tag, val, tag.split()[0])
-                mpp[key] = (u"<span style='font-size: 15px'>"
-                            u"%s%s</span><br>\n  ") % (title, val)
+                    val = '<%s>%s</%s>' % (tag, val, tag.split()[0])
+                mpp[key] = ("<span style='font-size: 15px'>"
+                            "%s%s</span><br>\n  ") % (title, val)
             else:
                 mpp[key] = ''
 
@@ -292,7 +296,7 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
         wrapOrZap('cc', 'Kopi til')
 
         # create initial HTML version
-        html = u'''<!DOCTYPE html>
+        html = '''<!DOCTYPE html>
 <html lang="da">
 <head>
   <meta charset="utf-8">
@@ -326,7 +330,7 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
             if url not in iimgs:
                 try:
                     data = surllib.skoleGetURL(url, False)
-                except urllib2.URLError:
+                except urllib.error.URLError:
                     # could not fetch URL for some reason - ignore
                     continue
                 # is this actually an image?
@@ -351,7 +355,7 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
 
         def absUrl(url):
             if url.startswith('/'):
-                return u'https://%s%s' % (config.options.hostname, url)
+                return 'https://%s%s' % (config.options.hostname, url)
             return url
 
         def tooBig(data):
@@ -360,7 +364,7 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
             if attachBytes[0] + len(data) <= MAX_ATTACH_BYTES:
                 attachBytes[0] += len(data)
                 return False
-            config.log(u'Udelader stor vedhæftning (%d bytes)' % len(data), 2)
+            config.log('Udelader stor vedhæftning (%d bytes)' % len(data), 2)
             return True
 
         for atag in html.findAll('a'):
@@ -374,9 +378,9 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
                 data = None
                 try:
                     data = surllib.skoleGetURL(url, False)
-                except urllib2.URLError:
+                except urllib.error.URLError:
                     # unable to fetch URL
-                    config.log(u'%s: Kan ikke hente flg. URL: %s' %
+                    config.log('%s: Kan ikke hente flg. URL: %s' %
                                (self.mp['title'] if self.mp['title'] else self,
                                 url))
                 if data:
@@ -401,12 +405,12 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
         # Now, put the pieces together
         html = html.prettify()
         if dropped:
-            note = u''.join(
-                u"<p style='color:#a00'>[vedhæftning fjernet — "
-                u"for stor til mail] <a href='%s'>%s</a></p>\n"
+            note = ''.join(
+                "<p style='color:#a00'>[vedhæftning fjernet — "
+                "for stor til mail] <a href='%s'>%s</a></p>\n"
                 % (url, text or url) for (url, text) in dropped)
-            if u'</body>' in html:
-                html = html.replace(u'</body>', note + u'</body>', 1)
+            if '</body>' in html:
+                html = html.replace('</body>', note + '</body>', 1)
             else:
                 html += note
         msgHtml = MIMEText(html, 'html', 'utf-8')
@@ -432,7 +436,7 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
             msg.attach(msgHtml)
 
             # Attach images if any
-            for (url, (cid, data)) in iimgs.items():
+            for (url, (cid, data)) in list(iimgs.items()):
                 m = MIMEImage(data)
                 m.add_header('Content-ID', '<%s>' % cid)
                 fn = niceFilename(url)
@@ -457,33 +461,33 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
 
         title = self.mp['title']
         if self.mp['children']:
-            title = u'[%s] %s' % (', '.join(self.mp['children']), title)
+            title = '[%s] %s' % (', '.join(self.mp['children']), title)
         msg['Subject'] = headerEncodeField(title, 60)
         if 'sender' in self.mp and self.mp['sender']:
             # ProtonMail's SMTP parser does not handle RFC 2047 encoded-words
             # in From-headers — it treats the encoded-word as the addr-spec
             # and fails to match MAIL FROM. We must use plain ASCII.
             translit = {
-                u'\xe6': u'ae', u'\xf8': u'oe', u'\xe5': u'aa',
-                u'\xc6': u'Ae', u'\xd8': u'Oe', u'\xc5': u'Aa',
-                u'\xe4': u'ae', u'\xf6': u'oe', u'\xfc': u'ue',
-                u'\xc4': u'Ae', u'\xd6': u'Oe', u'\xdc': u'Ue',
-                u'\xe9': u'e',  u'\xe8': u'e',  u'\xea': u'e',
-                u'\xc9': u'E',  u'\xc8': u'E',
-                u'\xe1': u'a',  u'\xe0': u'a',
-                u'\xed': u'i',  u'\xf3': u'o',  u'\xfa': u'u',
-                u'\xf1': u'n',
+                '\xe6': 'ae', '\xf8': 'oe', '\xe5': 'aa',
+                '\xc6': 'Ae', '\xd8': 'Oe', '\xc5': 'Aa',
+                '\xe4': 'ae', '\xf6': 'oe', '\xfc': 'ue',
+                '\xc4': 'Ae', '\xd6': 'Oe', '\xdc': 'Ue',
+                '\xe9': 'e',  '\xe8': 'e',  '\xea': 'e',
+                '\xc9': 'E',  '\xc8': 'E',
+                '\xe1': 'a',  '\xe0': 'a',
+                '\xed': 'i',  '\xf3': 'o',  '\xfa': 'u',
+                '\xf1': 'n',
             }
             safe = self.mp['sender']
-            for k, v in translit.items():
+            for k, v in list(translit.items()):
                 safe = safe.replace(k, v)
             safe = safe.encode('ascii', 'ignore').decode('ascii')
             for ch in '()<>[]\\,;:"':
                 safe = safe.replace(ch, ' ')
             safe = ' '.join(safe.split())
-            sender = u'Skoleintra - %s' % safe
+            sender = 'Skoleintra - %s' % safe
         else:
-            sender = u'Skoleintra'
+            sender = 'Skoleintra'
         # sender is now pure ASCII — no MIME-encoding needed.
         # Wrap the From-header in a Header with a large maxlinelen so the
         # email Generator does NOT fold it onto a second line. The default
@@ -509,16 +513,16 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
 
     def maybeSend(self):
         if self.hasBeenSent():
-            config.log(u'Hopper tidligere sendt besked over: %s' % self, 2)
+            config.log('Hopper tidligere sendt besked over: %s' % self, 2)
             return False
         self.send()
         return True
 
     def send(self):
-        config.log(u'Sender email %s' %
+        config.log('Sender email %s' %
                    (self.mp['title'] if self.mp['title'] else self))
         if config.options.catchup:
-            config.log(u'(sendes faktisk ikke pga --catch-up)')
+            config.log('(sendes faktisk ikke pga --catch-up)')
             return self.store()
 
         msg = self.asEmail()
@@ -538,8 +542,8 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
                 server.starttls()
             except smtplib.SMTPException:
                 pass  # ok, but we tried...
-            server.login(config.options.smtpusername.encode('ascii'),
-                         config.options.smtppassword.encode('ascii'))
+            server.login(config.options.smtpusername,
+                         config.options.smtppassword)
 
         try:
             try:
@@ -551,8 +555,8 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
                 # smtplib har allerede kaldt rset() på forbindelsen, så vi kan
                 # genbruge den. Genopbyg mailen uden de store vedhæftninger og
                 # prøv én gang til.
-                config.log(u'ADVARSEL: besked afvist som for stor (%d bytes: '
-                           u'%s) - fjerner store vedhæftninger og prøver igen'
+                config.log('ADVARSEL: besked afvist som for stor (%d bytes: '
+                           '%s) - fjerner store vedhæftninger og prøver igen'
                            % (len(msg.as_string()), e.smtp_error), 0)
                 self._dropBigAttachments = True
                 self._email = None  # tving genopbygning i asEmail()
@@ -564,9 +568,9 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
                         raise
                     # Stadig for stor (fx store inline-billeder). Giv op pænt;
                     # store() nedenfor bryder den timelige genforsøgs-løkke.
-                    config.log(u'ADVARSEL: besked stadig afvist som for stor '
-                               u'(%d bytes) - springer over for at undgå evig '
-                               u'genforsøgning' % len(msg.as_string()), 0)
+                    config.log('ADVARSEL: besked stadig afvist som for stor '
+                               '(%d bytes) - springer over for at undgå evig '
+                               'genforsøgning' % len(msg.as_string()), 0)
         finally:
             try:
                 server.quit()

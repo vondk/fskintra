@@ -6,7 +6,7 @@ import re
 import sys
 import time
 
-import config
+from . import config
 
 
 def copy(bs):
@@ -30,7 +30,7 @@ def find1orFail(bs, sel, asText=False):
     'Find a single tag matching sel or fail'
     hits = bs.select(sel)
     if len(hits) != 1:
-        config.log(u"'%s' var %d gange på siden (!=1)" % (sel, len(hits)), -1)
+        config.log("'%s' var %d gange på siden (!=1)" % (sel, len(hits)), -1)
         sys.exit(1)
     hit = hits[0]
     if asText:
@@ -40,7 +40,7 @@ def find1orFail(bs, sel, asText=False):
 
 def contents2html(bs):
     'Return HTML inside bs as unicode text'
-    return u''.join(unicode(c) for c in bs.contents).strip()
+    return ''.join(str(c) for c in bs.contents).strip()
 
 
 def appendComment(bs, text=''):
@@ -50,7 +50,7 @@ def appendComment(bs, text=''):
 
 def appendTodayComment(bs):
     '''Append a comment 'Tag' with today's date'''
-    appendComment(bs, time.strftime(u' I dag er %Y-%m-%d '))
+    appendComment(bs, time.strftime(' I dag er %Y-%m-%d '))
 
 
 def deobfuscateEmail(s):
@@ -123,7 +123,7 @@ def cleanupSoup(bs):
             if st:
                 sts.append(st)
         if sts:
-            tag['style'] = u';'.join(sts)
+            tag['style'] = ';'.join(sts)
         else:
             del tag['style']
 
@@ -166,7 +166,7 @@ def condenseSoup(bs):
     '''Trim bs for empty divs, etc to condense the HTML put in e-mails'''
     for e in bs.select('div'):
         # remove empty divs
-        contents = u''.join(map(unicode, e.children)).strip()
+        contents = ''.join(map(str, e.children)).strip()
         if not contents:
             e.extract()
 

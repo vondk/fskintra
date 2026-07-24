@@ -4,11 +4,11 @@ import collections
 import json
 import re
 
-import config
-import sbs4
-import schildren
-import semail
-import surllib
+from . import config
+from . import sbs4
+from . import schildren
+from . import semail
+from . import surllib
 
 SECTION = 'msg'
 
@@ -21,10 +21,10 @@ Output is an semail.Message ready to be sent'''
     # when this happens
     assert(not jsn['AdditionalLinkUrl'])
 
-    html = u'<div class="base">%s</div>\n' % jsn['BaseText']
+    html = '<div class="base">%s</div>\n' % jsn['BaseText']
     if jsn['PreviousMessagesText']:
-        jsn['Subject'] = u'Re: ' + jsn['Subject']
-        html += u'<div class="prev">%s</div>\n' % jsn['PreviousMessagesText']
+        jsn['Subject'] = 'Re: ' + jsn['Subject']
+        html += '<div class="prev">%s</div>\n' % jsn['PreviousMessagesText']
 
     msg = semail.Message(cname, SECTION, html)
     if threadId:
@@ -66,7 +66,7 @@ def parseTrayMessage(cname, bs, mid, sender):
 
     # Maybe we also have "Reply/Forward text"
     div = bs.select('div.sk-message-text + a + div')
-    jsn['PreviousMessagesText'] = sbs4.contents2html(div[0]) if div else u''
+    jsn['PreviousMessagesText'] = sbs4.contents2html(div[0]) if div else ''
 
     # Do we have any attachments?
     jsn['AttachmentsLinks'] = []
@@ -86,7 +86,7 @@ def parseTrayMessage(cname, bs, mid, sender):
     more = rec.find('a', 'sk-message-show-more-link')
     if more:
         more.extract()  # remove Vis ... mere
-    jsn['Recipients'] = re.split(ur'\s*(?:,| og )\s*', rec.text.strip())
+    jsn['Recipients'] = re.split(r'\s*(?:,| og )\s*', rec.text.strip())
 
     return msgFromJson(cname, jsn)
 
@@ -113,7 +113,7 @@ def parseTrayMessages(cname, bs):
         if semail.hasSentMessage(tp=SECTION, mid=mid):
             continue
 
-        config.clog(cname, u'Henter ny besked: %s - %s' % (sender, title), 2)
+        config.clog(cname, 'Henter ny besked: %s - %s' % (sender, title), 2)
         bs = surllib.skoleGetURL(url, True)
 
         msg = parseTrayMessage(cname, bs, mid, sender)
@@ -123,11 +123,11 @@ def parseTrayMessages(cname, bs):
 
 
 def markMessageAsRead(cname, mid, isRead=True):
-    assert(type(mid) in [str, unicode])
+    assert(type(mid) in [str, str])
     isRead = 'true' if isRead else 'false'
     url = schildren.getChildURL(cname, '/messages/UpdateMessagesReadState')
     data = {'selectionState[MessageIds][]': mid, 'isRead': isRead}
-    config.clog(cname, u'Markerer besked #%s som læst' % mid, 3)
+    config.clog(cname, 'Markerer besked #%s som læst' % mid, 3)
     surllib.skoleGetURL(url, noCache=True, postData=data)
 
 
@@ -155,12 +155,12 @@ def parseMessages(cname, bs):
     emsgs = []
     for i, c in enumerate(conversations[::1]):
         tid = c.get('ThreadId')
-        lmid = unicode(c.get('LatestMessageId'))
+        lmid = str(c.get('LatestMessageId'))
         if not tid:
             # ThreadId can be empty if this is a msg to all students
             tid = ''
         if not lmid:
-            config.clog(cname, u'Noget galt i tråd #%d %r %r'
+            config.clog(cname, 'Noget galt i tråd #%d %r %r'
                         % (i, tid, lmid), -1)
             continue
 
@@ -194,7 +194,7 @@ def parseMessages(cname, bs):
 
         assert(type(msgs) == list)
         for jsn in msgs[::-1]:
-            mid = unicode(jsn.get('Id'))
+            mid = str(jsn.get('Id'))
             if semail.hasSentMessage(tp=SECTION, mid=(tid, mid)):
                 continue
 
@@ -210,7 +210,7 @@ def getMsgsForChild(cname):
     if dtype == 'conversations':
         # New more "gmail" like message view
         url = schildren.getChildURL(cname, '/messages/conversations')
-        config.clog(cname, u'Kigger efter nye beskeder på %s' % url)
+        config.clog(cname, 'Kigger efter nye beskeder på %s' % url)
         bs = surllib.skoleGetURL(url, asSoup=True, noCache=True)
 
         return parseMessages(cname, bs)
@@ -219,14 +219,14 @@ def getMsgsForChild(cname):
         msgs = []
         for tray in ['inbox', 'outbox']:
             url = schildren.getChildURL(cname, '/messages/'+tray)
-            config.clog(cname, u'Kigger efter nye beskeder på %s' % url)
+            config.clog(cname, 'Kigger efter nye beskeder på %s' % url)
             bs = surllib.skoleGetURL(url, asSoup=True, noCache=True)
 
             msgs += parseTrayMessages(cname, bs)
 
         return msgs
     else:
-        config.clog(cname, u'Besked-indbakke-type %r ikke understøttet'
+        config.clog(cname, 'Besked-indbakke-type %r ikke understøttet'
                     % dtype, 0)
         return []
 
@@ -245,9 +245,9 @@ def skoleDialogue(cnames):
             else:
                 msgs[mid] = msg
 
-    for mid, msg in msgs.items():
+    for mid, msg in list(msgs.items()):
         cname = ','.join(msg.mp['children'])
-        config.clog(cname, u'Ny besked fundet: %s' % msg.mp['title'])
+        config.clog(cname, 'Ny besked fundet: %s' % msg.mp['title'])
         msg.maybeSend()
         if msg.mp['data']['unread']:
             for cn in msg.getChildren():

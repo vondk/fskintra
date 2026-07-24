@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 
-import config
-import sbs4
-import schildren
-import semail
-import surllib
+from . import config
+from . import sbs4
+from . import schildren
+from . import semail
+from . import surllib
 
 SECTION = 'sgn'
 MAX_CACHE_AGE = .49
@@ -13,7 +13,7 @@ MAX_CACHE_AGE = .49
 def findEvents(cname, bs):
     '''Look for new events'''
     toptitle = bs.select('.sk-grid-top-header li')
-    toptitle = toptitle[0].string.strip() if toptitle else u'Ukendt'
+    toptitle = toptitle[0].string.strip() if toptitle else 'Ukendt'
 
     for ul in bs.select('.sk-signup-container ul.ccl-rwgm-row'):
         if 'sk-grid-top-header' in ul['class']:
@@ -30,28 +30,28 @@ def findEvents(cname, bs):
             s = li.text.strip()
 
             if 'sk-grid-inline-header' in li['class']:
-                li.name = u'dt'
+                li.name = 'dt'
                 li['style'] = 'font-weight:bold'
                 key = s.rstrip(':')
             else:
-                li.name = u'dd'
+                li.name = 'dd'
                 kvl.append((key, s))
                 kv[key.lower()] = s
             dl.append(li)
 
-        if list(k for k, v in kv.items() if k.startswith(u'status') and
-                v.lower().startswith(u'lukket')):
+        if list(k for k, v in list(kv.items()) if k.startswith('status') and
+                v.lower().startswith('lukket')):
             continue  # Ignore this line
 
-        msg = semail.Message(cname, SECTION, unicode(ebs))
-        msg.setTitle(u'%s: %s' % kvl[0])
+        msg = semail.Message(cname, SECTION, str(ebs))
+        msg.setTitle('%s: %s' % kvl[0])
         msg.maybeSend()
 
 
 @config.Section(SECTION, True)
 def skoleSignup(cname):
     'Tilmelding til samtaler/arrangementer'
-    config.clog(cname, u'Kigger efter nye samtaler/arrangementer')
+    config.clog(cname, 'Kigger efter nye samtaler/arrangementer')
     for suffix in ('conversation', 'event'):
         url = schildren.getChildURL(cname, '/signup/' + suffix)
         bs = surllib.skoleGetURL(url, True, MAX_CACHE_AGE)
