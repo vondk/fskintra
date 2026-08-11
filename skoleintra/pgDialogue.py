@@ -135,6 +135,12 @@ def parseMessages(cname, bs):
     '''Look for new messages in each conversation'''
     # Look for a div with a very long attribute with json
     main = bs.find('div', 'sk-l-content-wrapper')
+    if main is None:
+        # The page does not have the expected layout (e.g., a transient
+        # error page from ForældreIntra). Skip this child instead of
+        # breaking the entire run.
+        config.clog(cname, u'Kunne ikke finde indholdet på besked-siden', -1)
+        return []
     conversations = None
     for d in main.findAll('div'):
         for a in d.attrs:
