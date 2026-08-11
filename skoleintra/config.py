@@ -39,23 +39,37 @@ CONFIG_OPTIONS = (
      u'../cache hhv. ../msg)'),
     (u'email',
      re.compile(r'^.+$'),
-     u'Modtageremailadresse (evt. flere adskilt med komma)'),
-    (u'senderemail',
-     re.compile(r'^.+$'),
-     u'Afsenderemailadresse (evt. samme adresse som ovenover)'),
-    (u'smtphostname',
-     re.compile(r'^[-.a-zA-Z0-9]+$'),
-     u'SMTP servernavn (evt. localhost hvis du kører din egen server)'
-     u' fx smtp.gmail.com eller asmtp.mail.dk'),
-    (u'smtpport',
-     re.compile(r'^[0-9]+$'),
-     u'SMTP serverport fx 25 (localhost), 587 (gmail, tdc)'),
-    (u'smtpusername',
-     re.compile(r''),
-     u'SMTP Login (evt. tom hvis login ikke påkrævet)'),
-    (u'smtppassword',
-     re.compile(r''),
-     u'SMTP password (evt. tom hvis login ikke påkrævet)'))
+     u'Modtageremailadresse (evt. flere adskilt med komma)'))
+
+# Præfix på alle fskintras miljøvariabler
+ENV_PREFIX = u'FSKINTRA_'
+
+# Afsender- og SMTP-opsætning. Dette er opsætning af selve installationen -
+# den er den samme for alle profiler (der sendes fra den samme afsender til
+# dem alle) - og den er derfor ikke en del af --config/onboardingen, men
+# angives i stedet via miljøvariabler.
+# Formatet er (nøgle, miljøvariabel uden præfix, tjek, standard, forklaring)
+ENV_OPTIONS = (
+    (u'senderemail', u'SENDER_EMAIL',
+     re.compile(r'^.+$'), u'',
+     u'Afsenderemailadresse - den samme for alle profiler'),
+    (u'smtphostname', u'SMTP_HOST',
+     re.compile(r'^[-.a-zA-Z0-9]+$'), u'localhost',
+     u'SMTP servernavn fx smtp.gmail.com eller asmtp.mail.dk'),
+    (u'smtpport', u'SMTP_PORT',
+     re.compile(r'^[0-9]+$'), u'25',
+     u'SMTP serverport fx 25 (localhost), 587 (gmail, tdc), 465 (SSL)'),
+    (u'smtpusername', u'SMTP_USER',
+     re.compile(r''), u'',
+     u'SMTP Login (tom hvis login ikke påkrævet)'),
+    (u'smtppassword', u'SMTP_PASSWORD',
+     re.compile(r''), u'',
+     u'SMTP password (tom hvis login ikke påkrævet)'))
+
+
+def envName(name):
+    '''Full name of the environment variable used for a given setting'''
+    return ENV_PREFIX + name
 
 
 def ensureDanish():
@@ -193,8 +207,76 @@ def configure(configfilename, profile):
     cfg.writeTo(configfilename)
 
     print()
-    print(u'Din nye opsætning er klar -- kør nu programmet uden --config')
+    print(u'Din nye opsætning er gemt.')
+    print()
+    print(u'Afsender- og SMTP-opsætningen er IKKE en del af opsætningen her,')
+    print(u'da den er den samme for alle profiler. Den angives i stedet via')
+    print(u'følgende miljøvariabler:')
+    print()
+    for (key, env, check, default, question) in ENV_OPTIONS:
+        extra = u''
+        if default:
+            extra = u' (standard: %s)' % default
+        elif not check.match(u''):
+            extra = u' (skal angives)'
+        print(u'  %-24s %s%s' % (envName(env), question, extra))
+    print()
+    print(u'Kør nu programmet uden --config')
     sys.exit(0)
+
+
+def readEnvOptions(args):
+    '''Read the sender/SMTP setup from the environment and copy it to args.
+
+    Fails if one or more settings are missing/invalid'''
+
+    values, sources = {}, {}
+    for (key, env, check, default, question) in ENV_OPTIONS:
+        value = os.environ.get(envName(env), u'')
+        source = u'miljøvariablen %s' % envName(env)
+        if not value.strip():
+            value = default
+            source = u'standardværdien'
+        # Do not strip passwords - a space may well be part of the password
+        values[key] = value if key.endswith('password') else value.strip()
+        sources[key] = source
+
+    for (key, env, check, default, question) in ENV_OPTIONS:
+        value = values[key]
+        extraErr = u''
+        if check.match(value):
+            if key == 'smtpusername' and value and not values['smtppassword']:
+                extraErr = (u'\n%s må ikke angives uden at %s også er angivet.'
+                            % (envName('SMTP_USER'), envName('SMTP_PASSWORD')))
+            elif (key == 'smtppassword' and value and
+                  not values['smtpusername']):
+                extraErr = (u'\n%s kræves da %s er angivet.'
+                            % (envName('SMTP_USER'), envName('SMTP_PASSWORD')))
+            else:
+                continue
+
+        # Never write a password to the screen
+        shown = value if value else u'[TOM]'
+        if value and key.endswith('password'):
+            shown = u'[ANGIVET]'
+
+        msg = u'''
+Der mangler en lovlig værdi for %s.%s
+
+Miljøvariabel  : %s
+Forklaring     : %s
+Nuværende værdi: %s (fra %s)
+
+Sæt miljøvariablen inden du kører fskintra, fx.
+export %s=NY_VÆRDI'''.strip() + '\n'
+        msg %= (envName(env), extraErr, envName(env), question,
+                shown, sources[key], envName(env))
+        sys.stderr.write(msg)
+        sys.exit(1)
+
+    for key in values:
+        setattr(args, key, values[key])
+    args.smtpport = int(args.smtpport, 10)
 
 
 def parseArgs(argv):
@@ -230,10 +312,6 @@ https://github.com/svalgaard/fskintra/
         '--password', dest='password', metavar='PASSWORD',
         default=None,
         help=u'Opdatér kodeord til ForældreIntra i konfigurationsfilen')
-    group.add_argument(
-        '--smtppassword', dest='smtppassword', metavar='PASSWORD',
-        default=None,
-        help=u'Opdatér kodeord til SMTP (smtppassword) i konfigurationsfilen')
 
     group = parser.add_argument_group(u'Hvad/hvor meget skal hentes')
     group.add_argument(
@@ -284,8 +362,6 @@ https://github.com/svalgaard/fskintra/
         parser.error(u'PROFILE må kun indeholde a til z, 0-9, _, . og -')
     if args.doconfig and args.password:
         parser.error(u'--config og --password kan ikke bruges samtidigt')
-    if args.doconfig and args.smtppassword:
-        parser.error(u'--config og --smtppassword kan ikke bruges samtidigt')
 
     # Setup (default) values
     args.verbosity = max(sum(args.verbosity), 0)
@@ -363,14 +439,10 @@ om du har kaldt fskintra med argumenterne -p, -h og -t.
                       u'angivet med --profile') %
                      (args.configfilename, args.profile))
 
-    # Do we actaully want to set a password/smtppassword
-    if args.password is not None or args.smtppassword is not None:
-        if args.password is not None:
-            cfg['password'] = args.password
-            print(u'Kodeord opdateret')
-        if args.smtppassword is not None:
-            cfg['smtppassword'] = args.smtppassword
-            print(u'SMTP-kodeord opdateret')
+    # Do we actaully want to set a password
+    if args.password is not None:
+        cfg['password'] = args.password
+        print(u'Kodeord opdateret')
         cfg.writeTo(args.configfilename)
         print(u"Konfigurationsfilen '%s' opdateret" % args.configfilename)
         sys.exit(0)
@@ -379,23 +451,13 @@ om du har kaldt fskintra med argumenterne -p, -h og -t.
     for (key, check, question) in CONFIG_OPTIONS:
         val = cfg[key]
         setattr(args, key, val)  # Copy the (possibly empty) value to args
-        extraErr = u''
         if check.match(val):
             if key == 'hostname':
                 args.hostname = str(args.hostname)
-            if key == 'smtpport':
-                args.smtpport = int(args.smtpport, 10)
-
-            if key == 'smtpusername' and val and not cfg['smtppassword']:
-                extraErr = (u'\nsmtpusername må ikke angives uden at '
-                            u'smtppassword også er angivet.')
-            elif key == 'smtppassword' and val and not cfg['smtpusername']:
-                extraErr = u'\nsmtppassword kræves da smtpusername er angivet.'
-            else:
-                continue
+            continue
 
         msg = u'''
-Konfigurationsfilen mangler en lovlig indstilling for %s.%s
+Konfigurationsfilen mangler en lovlig indstilling for %s.
 
 Konfig.fil     : %s
 Profil         : %s
@@ -406,14 +468,24 @@ Nuværende værdi: %s
 Ret direkte i konfigurationsfilen ved at tilføje en linje/rette linjen med
 %s = NY_VÆRDI
 Eller kør fskintra med --config'''.strip() + '\n'
-        msg %= (key, extraErr, args.configfilename, args.profile,
+        msg %= (key, args.configfilename, args.profile,
                 key, question, cfg[key] if cfg[key] else '[TOM]', key)
         if key.endswith('password'):
             msg += u'Eller kør fskintra med --%s\n' % key
-        if key.endswith('smtpusername'):
-            msg += u'Eller kør fskintra med --smtppassword\n'
         sys.stderr.write(msg)
         sys.exit(1)
+
+    # Warn about sender/SMTP settings left over in the configuration file -
+    # these are no longer read, they must be set in the environment
+    stale = [(key, env) for (key, env, _c, _d, _q) in ENV_OPTIONS if cfg[key]]
+    if stale:
+        log(u'ADVARSEL: %s i konfigurationsfilen bruges ikke længere - '
+            u'sæt i stedet %s' %
+            (u', '.join(key for (key, env) in stale),
+             u', '.join(envName(env) for (key, env) in stale)), 0)
+
+    # The sender/SMTP setup comes from the environment, not from --config
+    readEnvOptions(args)
 
     # Setup cache and msg directories, and ensure that they exist
     args.cacheprefix = args.cacheprefix.strip('-')

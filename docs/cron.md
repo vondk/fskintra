@@ -23,6 +23,15 @@ Indhold kunne se sådan her ud:
 # Sikr at Python kan finde ud af at lave UTF-8
 export PYTHONIOENCODING=UTF-8
 
+# Afsender + SMTP-opsætning. Cron kører med et meget begrænset miljø, så
+# disse SKAL sættes her (eller indlæses fra en fil med fx
+# 'set -a; . ~/.fskintra.env; set +a')
+export FSKINTRA_SENDER_EMAIL=example@example.net
+export FSKINTRA_SMTP_HOST=smtp.gmail.com
+export FSKINTRA_SMTP_PORT=587
+export FSKINTRA_SMTP_USER=example@example.net
+export FSKINTRA_SMTP_PASSWORD=hemmeligt
+
 # Gå til samme bibliotek som denne fil ligger i
 ROOT="$(dirname "$0")"
 cd "$ROOT"
@@ -37,6 +46,19 @@ python ./fskintra.py --quiet --quick
 Linjen med ```PYTHONIOENCODING=UTF-8``` er ikke altid nødvendig
 (se [evt denne side](troubleshooting.md)) men er næsten altid en god idé ift at
 Python ellers nemt kan give problemer med danske bogstaver.
+
+```FSKINTRA_*``` linjerne beskriver, hvem der sendes fra, og hvordan mailen
+sendes - se [installationssiden](install.md) for detaljer.
+Da scriptet kommer til at indeholde dit SMTP-kodeord, bør du beskytte det
+med fx ```chmod 700 run-cron.sh```.
+Alle profiler sender fra den samme afsenderadresse.
+
+Har du allerede lavet en env-fil ud fra ```fskintra.env.example```,
+kan du i stedet for de fem ```export``` linjer indlæse den:
+
+```bash
+set -a; . ~/.skoleintra/fskintra.env; set +a
+```
 
 Ved at tilføje ```--quiet``` skriver ```fskintra``` kun noget ud, hvis der er
 noget der går galt.

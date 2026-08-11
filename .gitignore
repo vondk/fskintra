@@ -38,6 +38,10 @@ nosetests.xml
 # Jekyll / docs
 docs/_site
 
+# Afsender/SMTP-opsætning - indeholder kodeord i klartekst
+# (fskintra.env.example er med i git, rigtige .env filer er ikke)
+*.env
+
 #
 .fuse_*
 *~

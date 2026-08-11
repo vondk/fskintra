@@ -78,6 +78,60 @@ i stedet for at køre --config igen.
 I ```~/.skoleintra/``` gemmes også alt hentet indhold og alle sendte
 emails.
 
+## 4. Sæt afsender og SMTP op ##
+
+Afsenderadressen og SMTP-serveren er opsætning af selve installationen -
+der sendes fra den *samme* afsenderadresse for alle profiler.
+Derfor er de *ikke* en del af ```--config```, men angives i stedet
+via miljøvariabler:
+
+| Miljøvariabel | Forklaring | Standard |
+| --- | --- | --- |
+| ```FSKINTRA_SENDER_EMAIL``` | Afsenderemailadresse - den samme for alle profiler | *skal angives* |
+| ```FSKINTRA_SMTP_HOST``` | SMTP servernavn fx ```smtp.gmail.com``` eller ```asmtp.mail.dk``` | ```localhost``` |
+| ```FSKINTRA_SMTP_PORT``` | SMTP serverport fx 25 (localhost), 587 (gmail, tdc), 465 (SSL) | ```25``` |
+| ```FSKINTRA_SMTP_USER``` | SMTP login (tom hvis login ikke er påkrævet) | *tom* |
+| ```FSKINTRA_SMTP_PASSWORD``` | SMTP password (tom hvis login ikke er påkrævet) | *tom* |
+
+```FSKINTRA_SMTP_USER``` og ```FSKINTRA_SMTP_PASSWORD``` skal enten begge
+angives eller begge udelades.
+
+Hvis du bruger bash eller lignende:
+
+```console
+user@sputnik:~/fskintra$ export FSKINTRA_SENDER_EMAIL=example@example.net
+user@sputnik:~/fskintra$ export FSKINTRA_SMTP_HOST=smtp.gmail.com
+user@sputnik:~/fskintra$ export FSKINTRA_SMTP_PORT=587
+user@sputnik:~/fskintra$ export FSKINTRA_SMTP_USER=example@example.net
+user@sputnik:~/fskintra$ export FSKINTRA_SMTP_PASSWORD=hemmeligt
+user@sputnik:~/fskintra$ ./fskintra.py
+```
+
+I stedet for at sætte variablerne i hånden kan du tage udgangspunkt i
+filen ```fskintra.env.example```, der ligger sammen med ```fskintra.py```:
+
+```console
+user@sputnik:~/fskintra$ cp fskintra.env.example ~/.skoleintra/fskintra.env
+user@sputnik:~/fskintra$ chmod 600 ~/.skoleintra/fskintra.env
+user@sputnik:~/fskintra$ nano ~/.skoleintra/fskintra.env
+user@sputnik:~/fskintra$ set -a; . ~/.skoleintra/fskintra.env; set +a
+user@sputnik:~/fskintra$ ./fskintra.py
+```
+
+Filen indeholder dit SMTP-kodeord i klartekst, så husk ```chmod 600```.
+Se [automatisk kørsel](cron.md) for hvordan den indlæses fra et cron-job.
+
+Modtageradressen (```email```) sættes derimod stadig per profil i
+konfigurationsfilen, så forskellige profiler kan sende til hver sin modtager.
+
+*Bemærk:* Har du en ældre opsætning, hvor ```senderemail```,
+```smtphostname```, ```smtpport```, ```smtpusername``` og ```smtppassword```
+står i konfigurationsfilen, bliver de linjer ikke længere brugt.
+```fskintra``` advarer om det ved kørsel - flyt værdierne over i
+miljøvariablerne ovenfor, og slet gerne linjerne fra konfigurationsfilen.
+
+## 5. Første kørsel ##
+
 Ved den første rigtige kørsel kan det være en fordel at
 køre med ```--catch-up```: I så fald hentes og markeres alt indhold som set
 uden faktisk at sende nogen e-mails; uden ```--catch-up``` får du måske mere
@@ -95,13 +149,16 @@ user@sputnik:~/fskintra$ ./fskintra.py
 user@sputnik:~/fskintra$ ./fskintra.py --quick
 ```
 
-## 4. Automatisk kørsel ##
+## 6. Automatisk kørsel ##
 
 Se siden om [automatisk kørsel/cron jobs](cron.md) for detaljer om
 hvordan du sætter dette op.
 
 
 ## Eksempler på konfigurationsfiler ##
+
+Bemærk at afsender/SMTP ikke står i konfigurationsfilen, men
+sættes via miljøvariabler - se punkt 4 ovenfor.
 
 ### En bruger på en skole ###
 Helt almindelig konfigurationfil oprettet via ```--config```:
@@ -114,11 +171,6 @@ password = pswd:a2FUVHgyNA==
 hostname = aaskolen.m.skoleintra.dk
 cacheprefix = -
 email = example@example.net
-senderemail = example@example.net
-smtphostname = smtp.gmail.com
-smtpport = 587
-smtpusername = example@example.net
-smtppassword = pswd:ZnNraW50cmE=
 ```
 
 ### To brugere på samme skole ###
@@ -131,11 +183,6 @@ kan man lave underprofiler:
 hostname = aaskolen.m.skoleintra.dk
 cacheprefix = -
 email = example@example.net
-senderemail = example@example.net
-smtphostname = smtp.gmail.com
-smtpport = 587
-smtpusername = example@example.net
-smtppassword = pswd:ZnNraW50cmE=
 
 [peter]
 logintype = uni
@@ -164,11 +211,6 @@ indhold), kun bliver udsendt én gang:
 ```
 [default]
 email = example@example.net
-senderemail = example@example.net
-smtphostname = smtp.gmail.com
-smtpport = 587
-smtpusername = example@example.net
-smtppassword = pswd:ZnNraW50cmE=
 
 [peter.skole1]
 hostname = aaskolen.m.skoleintra.dk
