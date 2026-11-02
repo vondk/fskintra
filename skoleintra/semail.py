@@ -5,6 +5,7 @@ import hashlib
 import json
 import mimetypes
 import os
+import re
 import shutil
 import smtplib
 import socket
@@ -113,6 +114,15 @@ def generateMIMEAttachment(path, data, usefilename=None):
     return msg
 
 
+def slugify(s):
+    '''Fx "Alma 5C" -> "alma-5c" (til Message-ID/tråd-nøgler)'''
+    s = s.lower()
+    for k, v in ((u'æ', u'ae'), (u'ø', u'oe'), (u'å', u'aa')):
+        s = s.replace(k, v)
+    s = re.sub(r'[^a-z0-9]+', '-', s).strip('-')
+    return s or 'x'
+
+
 class Message:
     def __init__(self, cname, tp, html):
         self.mp = {}
@@ -142,6 +152,10 @@ class Message:
         # Indgår IKKE i md5 - så et (ikke-deterministisk) AI-resumé aldrig
         # får en allerede sendt besked til at ligne en ny
         self.mp['summary_html'] = ''
+        # Mailtråd: rod-nøgle (fx 'pln.45-2026.alma-5c') og om denne
+        # besked selv er roden. Bruges til Message-ID/References
+        self.mp['thread'] = None
+        self.mp['thread_root'] = False
         self._email = None
 
     def __repr__(self):
@@ -226,6 +240,29 @@ class Message:
 
     def getData(self):
         return self.mp['data']
+
+    def setThread(self, rootKey, isRoot=False):
+        '''Saml beskeder i én tråd i mailklienten. rootKey må kun indeholde
+        a-z, 0-9, '.', '-' og '_' '''
+        assert(re.match(r'^[-._a-z0-9]+$', rootKey))
+        self.mp['thread'] = rootKey
+        self.mp['thread_root'] = bool(isRoot)
+        self._email = None
+
+    def threadHeaders(self):
+        '''(Message-ID, In-Reply-To/References eller None) for tråden'''
+        if not self.mp.get('thread'):
+            return None, None
+        self.prepareMessage()
+        sender = getattr(config.options, 'senderemail', '') or ''
+        domain = sender.rsplit('@', 1)[-1] if '@' in sender else 'fskintra'
+        domain = re.sub(r'[^-.a-zA-Z0-9]', '', domain) or 'fskintra'
+        root = '<fskintra.%s@%s>' % (self.mp['thread'], domain)
+        if self.mp.get('thread_root'):
+            return root, None
+        own = '<fskintra.%s.%s@%s>' % (self.mp['thread'],
+                                       self.mp['md5'][:12], domain)
+        return own, root
 
     def setSummaryHtml(self, html):
         assert(isinstance(html, str))
@@ -524,6 +561,18 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
         msg['From'] = Header(fromhdr, 'ascii', maxlinelen=998,
                              header_name='From')
         msg['To'] = config.options.email
+
+        # Mailtråd. Headerne er ren ASCII uden mellemrum og sættes som
+        # Header med stor maxlinelen, så de aldrig foldes (ProtonMail
+        # unfolder ikke headers - se From ovenfor)
+        msgid, root = self.threadHeaders()
+        if msgid:
+            msg['Message-ID'] = Header(msgid, 'ascii', maxlinelen=998,
+                                       header_name='Message-ID')
+        if root:
+            for name in ('In-Reply-To', 'References'):
+                msg[name] = Header(root, 'ascii', maxlinelen=998,
+                                   header_name=name)
 
         # Other tags just for ourselves
         keys = 'mid,md5'.split(',')

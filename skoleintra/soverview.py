@@ -16,6 +16,7 @@ from . import sai
 from . import shass
 from . import sstate
 from . import ssummary
+from . import ssync
 
 
 def _inputHash(items, today):
@@ -27,7 +28,11 @@ def _inputHash(items, today):
 
 def build(today=None):
     '''Byg overblikket. Returnerer (state, attributes)'''
-    today = today or datetime.date.today()
+    return _build(today or datetime.date.today())[:2]
+
+
+def _build(today):
+    '''Byg overblikket. Returnerer (state, attributes, entries)'''
     sstate.prune(today)
     items = sstate.activeItems(today)
 
@@ -65,7 +70,7 @@ def build(today=None):
         'opdateret': generated,
         'kilde': u'ai' if ai else u'regler',
     }
-    return headline, attributes
+    return headline, attributes, entries
 
 
 def update():
@@ -75,8 +80,12 @@ def update():
                    2)
         return False
     try:
-        state, attributes = build()
-        return shass.pushState(config.options.haentity, state, attributes)
+        today = datetime.date.today()
+        state, attributes, entries = _build(today)
+        ok = shass.pushState(config.options.haentity, state, attributes)
+        # Lektier -> to-do, ture -> kalender (uafhængigt af sensoren)
+        ssync.sync(entries, today)
+        return ok
     except Exception as e:  # Overblikket må aldrig vælte en kørsel
         config.log(u'ADVARSEL: kunne ikke bygge skoleoverblik: %r' % e, 0)
         return False

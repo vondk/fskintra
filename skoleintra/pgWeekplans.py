@@ -163,6 +163,10 @@ def handleWeekplan(cname, wid, plan):
     else:
         prev = sstate.getWeekplan(cname, wid)
         diff = sdiff.diffItems(prev['items'] if prev else None, items)
+        # Saml alle versioner af samme uges plan i én mailtråd
+        msg.setThread('pln.%s.%s' % (semail.slugify(wid),
+                                     semail.slugify(cname)),
+                      isRoot=prev is None)
         ai = None
         if not config.options.catchup and not sdiff.isEmpty(diff):
             ai = sai.summarizeChange(cname, title, diff, items)
