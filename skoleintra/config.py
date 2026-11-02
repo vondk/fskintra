@@ -93,6 +93,11 @@ ENV_OPTIONS = (
 # Indstillinger der aldrig må skrives på skærmen
 SECRET_OPTIONS = ('smtppassword', 'anthropicapikey', 'hatoken')
 
+# Valgfrie funktioner: en ugyldig værdi giver kun en advarsel og slår
+# funktionen fra - den må aldrig stoppe afsendelsen af mails
+SOFT_OPTIONS = ('anthropicapikey', 'aimodel', 'haurl', 'hatoken', 'haentity',
+                'haverifyssl')
+
 
 def envName(name):
     '''Full name of the environment variable used for a given setting'''
@@ -279,14 +284,15 @@ def readEnvOptions(args):
                   not values['smtpusername']):
                 extraErr = (u'\n%s kræves da %s er angivet.'
                             % (envName('SMTP_USER'), envName('SMTP_PASSWORD')))
-            elif key == 'haurl' and value and not values['hatoken']:
-                extraErr = (u'\n%s kræves da %s er angivet.'
-                            % (envName('HA_TOKEN'), envName('HA_URL')))
-            elif key == 'hatoken' and value and not values['haurl']:
-                extraErr = (u'\n%s kræves da %s er angivet.'
-                            % (envName('HA_URL'), envName('HA_TOKEN')))
             else:
                 continue
+
+        if key in SOFT_OPTIONS:
+            log(u'ADVARSEL: ugyldig værdi i %s - bruger i stedet %s' %
+                (envName(env), repr(default) if default else u'ingen værdi'),
+                0)
+            values[key] = default
+            continue
 
         # Never write a password/token to the screen
         shown = value if value else u'[TOM]'
@@ -306,6 +312,12 @@ export %s=NY_VÆRDI'''.strip() + '\n'
                 shown, sources[key], envName(env))
         sys.stderr.write(msg)
         sys.exit(1)
+
+    if bool(values['haurl']) != bool(values['hatoken']):
+        log(u'ADVARSEL: %s og %s skal angives sammen - skoleoverblik i '
+            u'Home Assistant er slået fra' %
+            (envName('HA_URL'), envName('HA_TOKEN')), 0)
+        values['haurl'] = values['hatoken'] = u''
 
     for key in values:
         setattr(args, key, values[key])
