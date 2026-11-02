@@ -45,3 +45,6 @@ docs/_site
 #
 .fuse_*
 *~
+
+# pytest
+.pytest_cache/

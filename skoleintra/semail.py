@@ -138,6 +138,10 @@ class Message:
         self.mp['md5'] = ''
         # Some email types need to save extra data
         self.mp['data'] = None
+        # Ekstra HTML (fx 'Nyt siden sidst') der vises øverst i mailen.
+        # Indgår IKKE i md5 - så et (ikke-deterministisk) AI-resumé aldrig
+        # får en allerede sendt besked til at ligne en ny
+        self.mp['summary_html'] = ''
         self._email = None
 
     def __repr__(self):
@@ -222,6 +226,11 @@ class Message:
 
     def getData(self):
         return self.mp['data']
+
+    def setSummaryHtml(self, html):
+        assert(isinstance(html, str))
+        self.mp['summary_html'] = html
+        self._email = None  # tving genopbygning i asEmail()
 
     def prepareMessage(self):
         # add missing fields, if any
@@ -321,6 +330,7 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
 <div class='hd' style='padding:5px;background-color:#eee;margin-bottom:15px;'>
   %(sender)s%(recipient)s%(cc)s<span>%(date_string)s</span>
 </div>
+%(summary_html)s
 <div class='text'>
   %(html)s
 </div>
