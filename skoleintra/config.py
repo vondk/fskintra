@@ -85,6 +85,14 @@ ENV_OPTIONS = (
     (u'haentity', u'HA_ENTITY',
      re.compile(r'^sensor\.[a-z0-9_]+$'), u'sensor.skoleintra_overblik',
      u'Home Assistant sensor der viser skoleoverblikket'),
+    (u'hatodo', u'HA_TODO',
+     re.compile(r'^(todo\.[a-z0-9_]+|off)$'), u'todo.lektier',
+     u"Home Assistant to-do-liste til lektier og ting der skal med "
+     u"('off' slår fra)"),
+    (u'hacalendar', u'HA_CALENDAR',
+     re.compile(r'^(calendar\.[a-z0-9_]+|off)$'), u'calendar.skole',
+     u"Home Assistant kalender til ture, særlige dage og ændrede tider "
+     u"('off' slår fra)"),
     (u'haverifyssl', u'HA_VERIFY_SSL',
      re.compile(r'^(true|false)$', re.I), u'true',
      u"Tjek Home Assistants SSL-certifikat - sæt til 'false' ved et "
@@ -96,7 +104,7 @@ SECRET_OPTIONS = ('smtppassword', 'anthropicapikey', 'hatoken')
 # Valgfrie funktioner: en ugyldig værdi giver kun en advarsel og slår
 # funktionen fra - den må aldrig stoppe afsendelsen af mails
 SOFT_OPTIONS = ('anthropicapikey', 'aimodel', 'haurl', 'hatoken', 'haentity',
-                'haverifyssl')
+                'hatodo', 'hacalendar', 'haverifyssl')
 
 
 def envName(name):

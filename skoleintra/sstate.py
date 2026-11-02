@@ -10,7 +10,8 @@ Struktur:
     "version": 1,
     "weekplans": {BARN: {UGE: {"title", "items", "md5", "updated"}}},
     "last_change": {BARN: {"when", "week", "title", "diff", "summary"}},
-    "overview": {"input_hash", "ai", "generated"}
+    "overview": {"input_hash", "ai", "generated"},
+    "sync": {"todo": {NØGLE: {...}}, "calendar": {NØGLE: {...}}}
   }
 '''
 
@@ -32,7 +33,7 @@ def _path():
 
 def _empty():
     return {'version': VERSION, 'weekplans': {}, 'last_change': {},
-            'overview': {}}
+            'overview': {}, 'sync': {}}
 
 
 def load():
@@ -159,3 +160,9 @@ def setOverviewCache(inputHash, ai):
     load()['overview'] = {'input_hash': inputHash, 'ai': ai,
                           'generated': _now()}
     save()
+
+
+def getSync(kind):
+    '''Det fskintra selv har oprettet i Home Assistant ('todo' eller
+    'calendar') - nøgle -> post. Ændringer gemmes med save()'''
+    return load()['sync'].setdefault(kind, {})

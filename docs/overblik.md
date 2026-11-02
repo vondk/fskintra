@@ -25,6 +25,8 @@ Alt styres med miljøvariabler (se også `fskintra.env.example`):
 | `FSKINTRA_HA_URL` | (tom) | Fx `http://homeassistant.local:8123`. Tom = intet overblik |
 | `FSKINTRA_HA_TOKEN` | (tom) | Long-lived access token (Profil → Sikkerhed i Home Assistant) |
 | `FSKINTRA_HA_ENTITY` | `sensor.skoleintra_overblik` | Sensoren der opdateres |
+| `FSKINTRA_HA_TODO` | `todo.lektier` | To-do-liste til lektier, afleveringer og ting der skal med. `off` slår fra |
+| `FSKINTRA_HA_CALENDAR` | `calendar.skole` | Kalender til ture, særlige dage og ændrede mødetider. `off` slår fra |
 | `FSKINTRA_HA_VERIFY_SSL` | `true` | `false` ved selvsigneret certifikat på det lokale net |
 
 ### API-nøgle til Claude
@@ -75,6 +77,37 @@ recorder:
     entities:
       - sensor.skoleintra_overblik
 ```
+
+### Lektier som to-do og ture i kalenderen
+
+Ud over sensoren synkroniserer fskintra punkterne til en to-do-liste og en
+kalender i Home Assistant, så lektier kan krydses af:
+
+| Kategori | Hvor | Eksempel |
+|---|---|---|
+| lektie, aflevering, medbring | `todo.lektier`, forfaldsdato = dagen | *Hugo · Dansk: Læsebogen side 46-47* |
+| tur, ændret tid | `calendar.skole`, heldagsbegivenhed | *Hugo: Tur til Eksperimentariet* |
+
+Opret listerne én gang i Home Assistant: *Indstillinger → Enheder og
+tjenester → Tilføj integration* → **Local To-do** (navn "Lektier") og
+**Local Calendar** (navn "Skole"). Findes en af dem ikke, springes den over.
+
+fskintra husker selv hvad det har oprettet og rører kun det:
+
+* Punkter du har krydset af, ændres aldrig.
+* Punkter du selv har slettet, genoprettes ikke.
+* Ændres teksten i ugeplanen, opdateres punktet. Forsvinder et kommende
+  punkt fra ugeplanen, fjernes det igen (to-do: kun hvis det ikke er krydset
+  af).
+* Afkrydsede punkter fjernes når forfaldsdatoen er passeret. Ikke-afkrydsede
+  bliver stående som forfaldne. Fortidige kalenderbegivenheder bevares.
+
+## Mailtråde
+
+Alle versioner af samme uges ugeplan (og svar i samme beskedtråd) får
+`Message-ID`/`In-Reply-To`/`References`-headers, så mailklienten samler dem i
+én tråd. Første version er trådens rod (`<fskintra.pln.45-2026.bianca-4b@…>`),
+de følgende henviser til den.
 
 ## Test
 
