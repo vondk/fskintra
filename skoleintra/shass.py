@@ -74,3 +74,29 @@ def pushState(entity, state, attributes):
         return False
     config.log(u'Home Assistant: %s opdateret' % entity, 2)
     return True
+
+
+def callService(domain, service, data, returnResponse=False):
+    '''Kald en service via POST /api/services/<domain>/<service>.
+
+    Med returnResponse returneres servicens svar (service_response), fx
+    {'todo.lektier': {'items': [...]}}. Fejl kastes videre til kalderen'''
+    path = '/api/services/%s/%s' % (urllib.parse.quote(domain),
+                                    urllib.parse.quote(service))
+    if returnResponse:
+        path += '?return_response'
+    res = _request('POST', path, data)
+    if returnResponse:
+        return (res or {}).get('service_response') or {}
+    return res
+
+
+def entityExists(entity):
+    '''True hvis entiteten findes i Home Assistant (404 giver False)'''
+    try:
+        _request('GET', '/api/states/' + urllib.parse.quote(entity))
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return False
+        raise
+    return True

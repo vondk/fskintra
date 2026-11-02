@@ -29,6 +29,9 @@ Output is an semail.Message ready to be sent'''
     msg = semail.Message(cname, SECTION, html)
     if threadId:
         msg.setMessageID(threadId, str(jsn["Id"]))
+        # Saml svar i samme tråd i mailklienten
+        msg.setThread('msg.%s' % semail.slugify(threadId),
+                      isRoot=not jsn['PreviousMessagesText'])
     else:
         msg.setMessageID(str(jsn["Id"]))
     msg.setTitle(jsn['Subject'])
