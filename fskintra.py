@@ -12,10 +12,16 @@ import skoleintra.pgHomework
 import skoleintra.pgPhotos
 import skoleintra.pgSignup
 import skoleintra.pgWeekplans
+import skoleintra.soverview
 
 
 def main(argv=None):
     skoleintra.config.parseArgs(argv)
+
+    if skoleintra.config.options.overviewonly:
+        # Genbyg kun skoleoverblikket ud fra tidligere hentede ugeplaner
+        skoleintra.soverview.update()
+        return
 
     (full, state) = skoleintra.snotifications.checkForUpdates()
     if not full:
@@ -29,6 +35,9 @@ def main(argv=None):
 
     # save updated state
     skoleintra.snotifications.saveState(state)
+
+    # Opdatér skoleoverblikket i Home Assistant (hvis sat op)
+    skoleintra.soverview.update()
 
 
 if __name__ == '__main__':

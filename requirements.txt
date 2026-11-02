@@ -1,3 +1,4 @@
 beautifulsoup4>=4.9
 mechanize>=0.4.8
 lxml>=6.1.0
+anthropic>=2.3,<3
