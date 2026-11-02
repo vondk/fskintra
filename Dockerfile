@@ -3,12 +3,16 @@ LABEL description='https://github.com/svalgaard/fskintra'
 
 ENV LC_ALL=da_DK.UTF-8
 ENV LANG=da_DK.UTF-8
+# Dansk tid - bruges til "i dag" i skoleoverblikket og til tidsstempler
+ENV TZ=Europe/Copenhagen
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONIOENCODING=UTF-8
 
-# fskintra needs a Danish locale to parse/format Danish dates
+# fskintra needs a Danish locale to parse/format Danish dates (and tzdata
+# for TZ=Europe/Copenhagen)
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends locales && \
+    DEBIAN_FRONTEND=noninteractive \
+        apt-get install -y --no-install-recommends locales tzdata && \
     sed -i '/da_DK.UTF-8/s/^# //' /etc/locale.gen && \
     locale-gen && \
     rm -rf /var/lib/apt/lists/*

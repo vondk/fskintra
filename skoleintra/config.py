@@ -64,7 +64,34 @@ ENV_OPTIONS = (
      u'SMTP Login (tom hvis login ikke påkrævet)'),
     (u'smtppassword', u'SMTP_PASSWORD',
      re.compile(r''), u'',
-     u'SMTP password (tom hvis login ikke påkrævet)'))
+     u'SMTP password (tom hvis login ikke påkrævet)'),
+    # Valgfri: AI-resuméer via Claude API og overblik i Home Assistant.
+    # Tomme værdier slår funktionen fra - mails sendes som hidtil.
+    (u'anthropicapikey', u'ANTHROPIC_API_KEY',
+     re.compile(r'^\S*$'), u'',
+     u'API-nøgle fra console.anthropic.com til AI-resuméer '
+     u'(tom = ingen AI, kun regelbaseret opsummering)'),
+    (u'aimodel', u'AI_MODEL',
+     re.compile(r'^[-.a-z0-9]+$'), u'claude-opus-5-5',
+     u'Claude-model til AI-resuméer, fx claude-opus-5-5 eller '
+     u'claude-haiku-5-5'),
+    (u'haurl', u'HA_URL',
+     re.compile(r'^(https?://\S+)?$'), u'',
+     u'Home Assistant URL, fx http://homeassistant.local:8123 '
+     u'(tom = intet overblik i Home Assistant)'),
+    (u'hatoken', u'HA_TOKEN',
+     re.compile(r'^\S*$'), u'',
+     u'Home Assistant long-lived access token'),
+    (u'haentity', u'HA_ENTITY',
+     re.compile(r'^sensor\.[a-z0-9_]+$'), u'sensor.skoleintra_overblik',
+     u'Home Assistant sensor der viser skoleoverblikket'),
+    (u'haverifyssl', u'HA_VERIFY_SSL',
+     re.compile(r'^(true|false)$', re.I), u'true',
+     u"Tjek Home Assistants SSL-certifikat - sæt til 'false' ved et "
+     u'selvsigneret certifikat på det lokale net'))
+
+# Indstillinger der aldrig må skrives på skærmen
+SECRET_OPTIONS = ('smtppassword', 'anthropicapikey', 'hatoken')
 
 
 def envName(name):
@@ -252,12 +279,18 @@ def readEnvOptions(args):
                   not values['smtpusername']):
                 extraErr = (u'\n%s kræves da %s er angivet.'
                             % (envName('SMTP_USER'), envName('SMTP_PASSWORD')))
+            elif key == 'haurl' and value and not values['hatoken']:
+                extraErr = (u'\n%s kræves da %s er angivet.'
+                            % (envName('HA_TOKEN'), envName('HA_URL')))
+            elif key == 'hatoken' and value and not values['haurl']:
+                extraErr = (u'\n%s kræves da %s er angivet.'
+                            % (envName('HA_URL'), envName('HA_TOKEN')))
             else:
                 continue
 
-        # Never write a password to the screen
+        # Never write a password/token to the screen
         shown = value if value else u'[TOM]'
-        if value and key.endswith('password'):
+        if value and (key.endswith('password') or key in SECRET_OPTIONS):
             shown = u'[ANGIVET]'
 
         msg = u'''
@@ -336,6 +369,12 @@ https://github.com/svalgaard/fskintra/
         dest='skipcache', default=False,
         action='store_true',
         help=u'Brug ikke tidligere hentet indhold/cache')
+    group.add_argument(
+        '--overview-only',
+        dest='overviewonly', default=False,
+        action='store_true',
+        help=u'Hent intet - genbyg kun skoleoverblikket ud fra tidligere '
+             u'hentede ugeplaner og send det til Home Assistant')
 
     group = parser.add_argument_group('Diverse')
     group.add_argument(
@@ -493,7 +532,8 @@ Eller kør fskintra med --config'''.strip() + '\n'
         args.cacheprefix += '-'
     args.cachedir = os.path.join(ROOT, args.cacheprefix + 'cache')
     args.msgdir = os.path.join(ROOT, args.cacheprefix + 'msg')
-    for dn in (args.cachedir, args.msgdir):
+    args.statedir = os.path.join(ROOT, args.cacheprefix + 'state')
+    for dn in (args.cachedir, args.msgdir, args.statedir):
         if not os.path.isdir(dn):
             os.makedirs(dn)
 
