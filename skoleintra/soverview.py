@@ -14,6 +14,7 @@ import json
 from . import config
 from . import sai
 from . import shass
+from . import smqtt
 from . import sstate
 from . import ssummary
 from . import ssync
@@ -73,17 +74,32 @@ def _build(today):
     return headline, attributes, entries
 
 
+def _publish(state, attributes):
+    '''Send sensoren til Home Assistant - via MQTT hvis sat op (overlever
+    genstart af HA), ellers via REST'''
+    entity = config.options.haentity
+    if not smqtt.isEnabled():
+        return shass.pushState(entity, state, attributes)
+    if shass.isEnabled() and not sstate.getFlag('mqtt_migrated'):
+        # Engangsoprydning: en tilstand oprettet via REST med samme entity_id
+        # ville ellers give MQTT-entiteten et andet id (..._2)
+        if shass.deleteState(entity):
+            sstate.setFlag('mqtt_migrated')
+    return smqtt.publishOverview(entity, state, attributes)
+
+
 def update():
     '''Byg overblikket og send det til Home Assistant. Må aldrig fejle'''
-    if not shass.isEnabled():
+    if not (shass.isEnabled() or smqtt.isEnabled()):
         config.log(u'Home Assistant er ikke sat op - springer overblik over',
                    2)
         return False
     try:
         today = datetime.date.today()
         state, attributes, entries = _build(today)
-        ok = shass.pushState(config.options.haentity, state, attributes)
-        # Lektier -> to-do, ture -> kalender (uafhængigt af sensoren)
+        ok = _publish(state, attributes)
+        # Lektier -> to-do, ture -> kalender (kræver REST, uafhængigt af
+        # hvordan sensoren sendes)
         ssync.sync(entries, today)
         return ok
     except Exception as e:  # Overblikket må aldrig vælte en kørsel

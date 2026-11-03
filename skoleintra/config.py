@@ -96,15 +96,32 @@ ENV_OPTIONS = (
     (u'haverifyssl', u'HA_VERIFY_SSL',
      re.compile(r'^(true|false)$', re.I), u'true',
      u"Tjek Home Assistants SSL-certifikat - sæt til 'false' ved et "
-     u'selvsigneret certifikat på det lokale net'))
+     u'selvsigneret certifikat på det lokale net'),
+    # Valgfrit: skoleoverblikket som rigtig entitet via MQTT discovery, så
+    # det overlever en genstart af Home Assistant
+    (u'mqtthost', u'MQTT_HOST',
+     re.compile(r'^[-.a-zA-Z0-9]*$'), u'',
+     u'MQTT-broker til skoleoverblikket, fx 192.168.1.25 '
+     u'(tom = overblik via Home Assistants REST API)'),
+    (u'mqttport', u'MQTT_PORT',
+     re.compile(r'^[0-9]+$'), u'1883',
+     u'MQTT-brokerens port'),
+    (u'mqttuser', u'MQTT_USER',
+     re.compile(r'^\S*$'), u'',
+     u'MQTT-brugernavn (tom hvis brokeren tillader anonyme)'),
+    (u'mqttpassword', u'MQTT_PASSWORD',
+     re.compile(r''), u'',
+     u'MQTT-kodeord'))
 
 # Indstillinger der aldrig må skrives på skærmen
-SECRET_OPTIONS = ('smtppassword', 'anthropicapikey', 'hatoken')
+SECRET_OPTIONS = ('smtppassword', 'anthropicapikey', 'hatoken',
+                  'mqttpassword')
 
 # Valgfrie funktioner: en ugyldig værdi giver kun en advarsel og slår
 # funktionen fra - den må aldrig stoppe afsendelsen af mails
 SOFT_OPTIONS = ('anthropicapikey', 'aimodel', 'haurl', 'hatoken', 'haentity',
-                'hatodo', 'hacalendar', 'haverifyssl')
+                'hatodo', 'hacalendar', 'haverifyssl', 'mqtthost', 'mqttport',
+                'mqttuser', 'mqttpassword')
 
 
 def envName(name):

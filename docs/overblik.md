@@ -28,6 +28,9 @@ Alt styres med miljøvariabler (se også `fskintra.env.example`):
 | `FSKINTRA_HA_TODO` | `todo.lektier` | To-do-liste til lektier, afleveringer og ting der skal med. `off` slår fra |
 | `FSKINTRA_HA_CALENDAR` | `calendar.skole` | Kalender til ture, særlige dage og ændrede mødetider. `off` slår fra |
 | `FSKINTRA_HA_VERIFY_SSL` | `true` | `false` ved selvsigneret certifikat på det lokale net |
+| `FSKINTRA_MQTT_HOST` | (tom) | MQTT-broker, fx `192.168.1.25`. Anbefalet, se nedenfor |
+| `FSKINTRA_MQTT_PORT` | `1883` | Brokerens port |
+| `FSKINTRA_MQTT_USER` / `_PASSWORD` | (tom) | Kun hvis brokeren kræver login |
 
 ### API-nøgle til Claude
 
@@ -77,6 +80,26 @@ recorder:
     entities:
       - sensor.skoleintra_overblik
 ```
+
+### Sensoren via MQTT (anbefalet)
+
+Uden MQTT oprettes sensoren via `POST /api/states`. Sådan en tilstand gemmer
+Home Assistant ikke: efter en genstart er sensoren væk, indtil fskintra kører
+igen (og fx Spook melder "unknown entity" i dashboards).
+
+Med `FSKINTRA_MQTT_HOST` sender fskintra i stedet sensoren via MQTT discovery
+som *retained* beskeder. Så er `sensor.skoleintra_overblik` en rigtig entitet
+(enhed "fskintra", `unique_id` `fskintra_skoleintra_overblik`), og brokeren
+leverer den igen, så snart Home Assistant er startet. Første gang slettes en
+evt. gammel REST-tilstand med samme id, så entiteten beholder sit navn.
+
+Topics:
+
+* `homeassistant/sensor/fskintra/skoleintra_overblik/config` (discovery)
+* `fskintra/skoleintra_overblik/state` og `.../attributes`
+
+To-do-listen og kalenderen synkroniseres fortsat via REST
+(`FSKINTRA_HA_URL`/`FSKINTRA_HA_TOKEN`).
 
 ### Lektier som to-do og ture i kalenderen
 

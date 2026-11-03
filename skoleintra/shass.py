@@ -100,3 +100,24 @@ def entityExists(entity):
             return False
         raise
     return True
+
+
+def deleteState(entity):
+    '''Slet en tilstand oprettet med pushState (DELETE /api/states/<entity>).
+    Returnerer True hvis den er væk bagefter (404 = fandtes ikke)'''
+    if not isEnabled():
+        return False
+    try:
+        _request('DELETE', '/api/states/' + urllib.parse.quote(entity))
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return True
+        config.log(u'ADVARSEL: Home Assistant svarede HTTP %d ved sletning '
+                   u'af %s' % (e.code, entity), 0)
+        return False
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        config.log(u'ADVARSEL: kunne ikke kontakte Home Assistant på %s: %s'
+                   % (config.options.haurl, e), 0)
+        return False
+    config.log(u'Home Assistant: gammel REST-tilstand %s slettet' % entity, 1)
+    return True
