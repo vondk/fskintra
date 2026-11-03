@@ -72,6 +72,10 @@ def options(tmp_path, monkeypatch):
         hatoken='',
         haentity='sensor.skoleintra_overblik',
         haverifyssl='true',
+        mqtthost='',
+        mqttport='1883',
+        mqttuser='',
+        mqttpassword='',
     )
     for name in ('cache', 'msg', 'state'):
         dn = tmp_path / name

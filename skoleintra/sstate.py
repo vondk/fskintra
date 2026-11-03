@@ -33,7 +33,7 @@ def _path():
 
 def _empty():
     return {'version': VERSION, 'weekplans': {}, 'last_change': {},
-            'overview': {}, 'sync': {}}
+            'overview': {}, 'sync': {}, 'flags': {}}
 
 
 def load():
@@ -166,3 +166,12 @@ def getSync(kind):
     '''Det fskintra selv har oprettet i Home Assistant ('todo' eller
     'calendar') - nøgle -> post. Ændringer gemmes med save()'''
     return load()['sync'].setdefault(kind, {})
+
+
+def getFlag(name):
+    return bool(load()['flags'].get(name))
+
+
+def setFlag(name, value=True):
+    load()['flags'][name] = bool(value)
+    save()
