@@ -104,3 +104,12 @@ def test_store_messages_mode(options, mode, files):
     assert len(os.listdir(dn)) == files
     # Markeringen er nok til at beskeden ikke sendes igen
     assert msg.hasBeenSent()
+
+
+def test_multiple_recipients_are_separate_rcpt_addresses(smtp, options):
+    options.email = 'a@example.net, b@example.net'
+    msg = semail.Message(CHILD, 'msg', u'<p>Hej</p>')
+    msg.setTitle(u'Besked')
+    msg.send()
+    (server,) = smtp.instances
+    assert ('sendmail', ['a@example.net', 'b@example.net']) in server.calls
