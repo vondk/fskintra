@@ -646,7 +646,13 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
 
     def _sendmail(self, server, msg):
         server.sendmail(config.options.senderemail,
-                        config.options.email, msg.as_string())
+                        recipients(), msg.as_string())
+
+
+def recipients():
+    '''Modtagerne som liste. config.options.email må indeholde flere
+    adresser adskilt med komma - smtplib opfatter en streng som én adresse'''
+    return [a.strip() for a in config.options.email.split(',') if a.strip()]
 
 
 def _sslContext():
