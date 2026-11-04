@@ -92,9 +92,39 @@ via miljøvariabler:
 | ```FSKINTRA_SMTP_PORT``` | SMTP serverport fx 25 (localhost), 587 (gmail, tdc), 465 (SSL) | ```25``` |
 | ```FSKINTRA_SMTP_USER``` | SMTP login (tom hvis login ikke er påkrævet) | *tom* |
 | ```FSKINTRA_SMTP_PASSWORD``` | SMTP password (tom hvis login ikke er påkrævet) | *tom* |
+| ```FSKINTRA_SMTP_VERIFY_SSL``` | Tjek SMTP-serverens SSL-certifikat. ```false``` kun ved en lokal server med selvsigneret certifikat | ```true``` |
+| ```FSKINTRA_STORE_MESSAGES``` | ```full``` gemmer en kopi af hver sendt mail i ```msg```-kataloget, ```marker``` gemmer kun en markering af at den er sendt | ```full``` |
 
 ```FSKINTRA_SMTP_USER``` og ```FSKINTRA_SMTP_PASSWORD``` skal enten begge
 angives eller begge udelades.
+
+Kræver SMTP-serveren login, sendes brugernavn og kodeord kun over en
+krypteret forbindelse: SSL på port 465, ellers STARTTLS. Understøtter
+serveren ikke STARTTLS, eller er certifikatet ugyldigt, fejler afsendelsen i
+stedet for at sende kodeordet i klartekst.
+
+### Profil via miljøvariabler ###
+
+I stedet for konfigurationsfilen kan selve profilen også angives med
+miljøvariabler. Det slås til ved at sætte ```FSKINTRA_USERNAME```, og så
+læses konfigurationsfilen slet ikke. Det er nyttigt, når fskintra køres af en
+tjeneste, så kodeordet aldrig skal gemmes på disken.
+
+| Miljøvariabel | Svarer til |
+|---|---|
+| ```FSKINTRA_LOGINTYPE``` | ```logintype``` (```alm``` eller ```uni```) |
+| ```FSKINTRA_USERNAME``` | ```username``` |
+| ```FSKINTRA_PASSWORD``` | ```password``` |
+| ```FSKINTRA_HOSTNAME``` | ```hostname``` |
+| ```FSKINTRA_RECIPIENT_EMAIL``` | ```email``` |
+| ```FSKINTRA_CACHEPREFIX``` | ```cacheprefix``` (valgfri) |
+
+```FSKINTRA_ROOT``` flytter kataloget ```~/.skoleintra``` (konfigurationsfil,
+cache, msg og state), fx til ét katalog pr. bruger.
+
+```fskintra.py --check-login``` logger blot ind og skriver de fundne børn som
+JSON på stdout. Exit-koden er 3, hvis ForældreIntra afviser brugernavn,
+kodeord eller logintype, og 4, hvis ForældreIntra ikke svarer som forventet.
 
 Hvis du bruger bash eller lignende:
 
