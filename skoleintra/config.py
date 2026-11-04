@@ -9,9 +9,18 @@ import os
 import re
 import sys
 
-# Default location of configuration files
-ROOT = os.path.expanduser('~/.skoleintra/')
+# Default location of configuration files. FSKINTRA_ROOT kan pege på et
+# andet katalog, fx et katalog pr. bruger når fskintra køres af en tjeneste
+ROOT = os.path.join(
+    os.environ.get('FSKINTRA_ROOT') or os.path.expanduser('~/.skoleintra/'),
+    '')
 CONFIG_FN = os.path.join(ROOT, 'skoleintra.txt')
+
+# Exit-koder - gør det muligt for et kaldende program at skelne mellem
+# forkert login (ret kodeordet) og midlertidige fejl hos ForældreIntra
+EXIT_ERROR = 1          # Generel fejl, fx ugyldig opsætning
+EXIT_LOGIN_FAILED = 3   # ForældreIntra afviste brugernavn/kodeord/logintype
+EXIT_SITE_ERROR = 4     # ForældreIntra svarede ikke som forventet
 
 # Sections / different types of sections/pages (Section)
 PAGE_SECTIONS = []
@@ -44,6 +53,18 @@ CONFIG_OPTIONS = (
 # Præfix på alle fskintras miljøvariabler
 ENV_PREFIX = u'FSKINTRA_'
 
+# Profilen (CONFIG_OPTIONS) kan alternativt angives helt via miljøvariabler i
+# stedet for konfigurationsfilen - fx når fskintra køres af en tjeneste for
+# flere brugere, så kodeordet aldrig skal gemmes på disken. Det slås til ved
+# at sætte FSKINTRA_USERNAME. Formatet er (nøgle, miljøvariabel uden præfix)
+PROFILE_ENV_OPTIONS = (
+    (u'logintype', u'LOGINTYPE'),
+    (u'username', u'USERNAME'),
+    (u'password', u'PASSWORD'),
+    (u'hostname', u'HOSTNAME'),
+    (u'cacheprefix', u'CACHEPREFIX'),
+    (u'email', u'RECIPIENT_EMAIL'))
+
 # Afsender- og SMTP-opsætning. Dette er opsætning af selve installationen -
 # den er den samme for alle profiler (der sendes fra den samme afsender til
 # dem alle) - og den er derfor ikke en del af --config/onboardingen, men
@@ -65,6 +86,14 @@ ENV_OPTIONS = (
     (u'smtppassword', u'SMTP_PASSWORD',
      re.compile(r''), u'',
      u'SMTP password (tom hvis login ikke påkrævet)'),
+    (u'smtpverifyssl', u'SMTP_VERIFY_SSL',
+     re.compile(r'^(true|false)$', re.I), u'true',
+     u"Tjek SMTP-serverens SSL-certifikat - sæt kun til 'false' ved en "
+     u'lokal server med selvsigneret certifikat'),
+    (u'storemessages', u'STORE_MESSAGES',
+     re.compile(r'^(full|marker)$'), u'full',
+     u"Gem en kopi af hver sendt mail ('full') eller kun en markering af "
+     u"at den er sendt ('marker')"),
     # Valgfri: AI-resuméer via Claude API og overblik i Home Assistant.
     # Tomme værdier slår funktionen fra - mails sendes som hidtil.
     (u'anthropicapikey', u'ANTHROPIC_API_KEY',
@@ -127,6 +156,21 @@ SOFT_OPTIONS = ('anthropicapikey', 'aimodel', 'haurl', 'hatoken', 'haentity',
 def envName(name):
     '''Full name of the environment variable used for a given setting'''
     return ENV_PREFIX + name
+
+
+def profileEnvMode():
+    '''Angives profilen via miljøvariabler (FSKINTRA_USERNAME er sat)?'''
+    return bool(os.environ.get(envName('USERNAME'), u'').strip())
+
+
+def readProfileEnv():
+    '''Læs profilen (CONFIG_OPTIONS) fra miljøvariablerne'''
+    values = {}
+    for (key, env) in PROFILE_ENV_OPTIONS:
+        value = os.environ.get(envName(env), u'')
+        # Do not strip passwords - a space may well be part of the password
+        values[key] = value if key.endswith('password') else value.strip()
+    return values
 
 
 def ensureDanish():
@@ -349,6 +393,37 @@ export %s=NY_VÆRDI'''.strip() + '\n'
     args.smtpport = int(args.smtpport, 10)
 
 
+def readConfigFile(args):
+    '''Læs profilen fra konfigurationsfilen. Håndterer også --password'''
+    cfg = ProfileConf(args.profile)
+    if os.path.isfile(args.configfilename):
+        if cfg.read(args.configfilename):
+            err = ''  # Everything ok
+        else:
+            err = u"Konfigurationsfilen %s kan ikke læses korrekt."
+    else:
+        err = u"Kan ikke finde konfigurationsfilen '%s'."
+    if err:
+        parser.error(
+            err % args.configfilename +
+            u'\nKør evt fskintra med --config for at sætte det op.')
+
+    if not cfg.has_section(args.profile):
+        parser.error((u'Konfigurationsfilen %s har ikke afsnittet [%s] '
+                      u'angivet med --profile') %
+                     (args.configfilename, args.profile))
+
+    # Do we actaully want to set a password
+    if args.password is not None:
+        cfg['password'] = args.password
+        print(u'Kodeord opdateret')
+        cfg.writeTo(args.configfilename)
+        print(u"Konfigurationsfilen '%s' opdateret" % args.configfilename)
+        sys.exit(0)
+
+    return cfg
+
+
 def parseArgs(argv):
     '''Parse command line options. Fails if one or more errors are found'''
     global parser
@@ -382,6 +457,11 @@ https://github.com/svalgaard/fskintra/
         '--password', dest='password', metavar='PASSWORD',
         default=None,
         help=u'Opdatér kodeord til ForældreIntra i konfigurationsfilen')
+    group.add_argument(
+        '--check-login',
+        dest='checklogin', default=False, action='store_true',
+        help=u'Log blot ind, skriv de fundne børn som JSON på stdout og '
+             u'afslut (exit-kode %d ved forkert login)' % EXIT_LOGIN_FAILED)
 
     group = parser.add_argument_group(u'Hvad/hvor meget skal hentes')
     group.add_argument(
@@ -493,46 +573,55 @@ om du har kaldt fskintra med argumenterne -p, -h og -t.
                           u'--section LIST for at få en liste over lovlige '
                           u'navne') % illegal)
 
+    envMode = profileEnvMode()
+    if envMode and (args.doconfig or args.password is not None):
+        parser.error(u'--config og --password kan ikke bruges når profilen '
+                     u'angives via miljøvariabler (%s er sat)'
+                     % envName('USERNAME'))
+
     if args.doconfig:
         configure(args.configfilename, args.profile)
         sys.exit(0)
 
-    cfg = ProfileConf(args.profile)
-    if os.path.isfile(args.configfilename):
-        if cfg.read(args.configfilename):
-            err = ''  # Everything ok
-        else:
-            err = u"Konfigurationsfilen %s kan ikke læses korrekt."
+    if envMode:
+        # Hele profilen kommer fra miljøet - konfigurationsfilen læses ikke
+        cfg = None
+        values = readProfileEnv()
     else:
-        err = u"Kan ikke finde konfigurationsfilen '%s'."
-    if err:
-        parser.error(
-            err % args.configfilename +
-            u'\nKør evt fskintra med --config for at sætte det op.')
+        cfg = readConfigFile(args)
+        values = dict((key, cfg[key]) for (key, _c, _q) in CONFIG_OPTIONS)
 
-    if not cfg.has_section(args.profile):
-        parser.error((u'Konfigurationsfilen %s har ikke afsnittet [%s] '
-                      u'angivet med --profile') %
-                     (args.configfilename, args.profile))
-
-    # Do we actaully want to set a password
-    if args.password is not None:
-        cfg['password'] = args.password
-        print(u'Kodeord opdateret')
-        cfg.writeTo(args.configfilename)
-        print(u"Konfigurationsfilen '%s' opdateret" % args.configfilename)
-        sys.exit(0)
-
-    # Check that the configuration in cfg is sane
+    # Check that the configuration is sane
+    envNames = dict(PROFILE_ENV_OPTIONS)
     for (key, check, question) in CONFIG_OPTIONS:
-        val = cfg[key]
+        val = values[key]
         setattr(args, key, val)  # Copy the (possibly empty) value to args
         if check.match(val):
             if key == 'hostname':
                 args.hostname = str(args.hostname)
             continue
 
-        msg = u'''
+        # Never write a password to the screen
+        shown = val if val else u'[TOM]'
+        if val and key.endswith('password'):
+            shown = u'[ANGIVET]'
+
+        if envMode:
+            msg = u'''
+Der mangler en lovlig værdi for %s.
+
+Profilen angives via miljøvariabler, da %s er sat.
+
+Miljøvariabel  : %s
+Forklaring     : %s
+Nuværende værdi: %s
+
+Sæt miljøvariablen inden du kører fskintra, fx.
+export %s=NY_VÆRDI'''.strip() + '\n'
+            env = envName(envNames[key])
+            msg %= (env, envName('USERNAME'), env, question, shown, env)
+        else:
+            msg = u'''
 Konfigurationsfilen mangler en lovlig indstilling for %s.
 
 Konfig.fil     : %s
@@ -544,21 +633,23 @@ Nuværende værdi: %s
 Ret direkte i konfigurationsfilen ved at tilføje en linje/rette linjen med
 %s = NY_VÆRDI
 Eller kør fskintra med --config'''.strip() + '\n'
-        msg %= (key, args.configfilename, args.profile,
-                key, question, cfg[key] if cfg[key] else '[TOM]', key)
-        if key.endswith('password'):
-            msg += u'Eller kør fskintra med --%s\n' % key
+            msg %= (key, args.configfilename, args.profile,
+                    key, question, shown, key)
+            if key.endswith('password'):
+                msg += u'Eller kør fskintra med --%s\n' % key
         sys.stderr.write(msg)
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
 
     # Warn about sender/SMTP settings left over in the configuration file -
     # these are no longer read, they must be set in the environment
-    stale = [(key, env) for (key, env, _c, _d, _q) in ENV_OPTIONS if cfg[key]]
-    if stale:
-        log(u'ADVARSEL: %s i konfigurationsfilen bruges ikke længere - '
-            u'sæt i stedet %s' %
-            (u', '.join(key for (key, env) in stale),
-             u', '.join(envName(env) for (key, env) in stale)), 0)
+    if cfg is not None:
+        stale = [(key, env) for (key, env, _c, _d, _q) in ENV_OPTIONS
+                 if cfg[key]]
+        if stale:
+            log(u'ADVARSEL: %s i konfigurationsfilen bruges ikke længere - '
+                u'sæt i stedet %s' %
+                (u', '.join(key for (key, env) in stale),
+                 u', '.join(envName(env) for (key, env) in stale)), 0)
 
     # The sender/SMTP setup comes from the environment, not from --config
     readEnvOptions(args)

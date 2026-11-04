@@ -189,7 +189,12 @@ def skoleLogin():
 
         config.log(u'skoleLogin: Check at URLen er rigtig '
                    u'og prøv evt. igen senere', -1)
-        sys.exit(1)
+        sys.exit(config.EXIT_SITE_ERROR)
+    except urllib.error.URLError as e:
+        # Fx DNS-fejl eller ingen forbindelse - prøv igen senere
+        config.log(u'skoleLogin: Kan ikke få forbindelse til %s: %s'
+                   % (config.options.hostname, e.reason), -1)
+        sys.exit(config.EXIT_SITE_ERROR)
 
     N = 6
     for round in range(N):  # try at most N times before failing
@@ -215,7 +220,7 @@ def skoleLogin():
             else:
                 config.log(u'Kunne ikke bekræfte kontaktoplysninger på %s'
                            % url, -1)
-                sys.exit(1)
+                sys.exit(config.EXIT_SITE_ERROR)
             resp = br.submit(nr=0)
             continue
 
@@ -242,7 +247,7 @@ def skoleLogin():
                 config.log(u'Check konfigurationsfilen, angiv evt. nyt '
                            u'kodeord med --password eller --config ELLER '
                            u'prøv igen senere...', -2)
-                sys.exit(1)
+                sys.exit(config.EXIT_LOGIN_FAILED)
 
             assert(config.options.logintype != 'alm')  # This must be uni login
             for form in br.forms():
@@ -255,7 +260,7 @@ def skoleLogin():
                            u'slået til? Prøv igen senere eller se '
                            u'https://svalgaard.github.io/fskintra/'
                            u'troubleshooting', -1)
-                sys.exit(1)
+                sys.exit(config.EXIT_SITE_ERROR)
             br['user'] = config.options.username
             br['pass'] = config.options.password
             resp = br.submit()
@@ -268,7 +273,7 @@ def skoleLogin():
                 config.log(u'Check konfigurationsfilen, angiv evt. nyt '
                            u'kodeord med --password eller --config ELLER '
                            u'prøv igen senere...', -2)
-                sys.exit(1)
+                sys.exit(config.EXIT_LOGIN_FAILED)
 
             # This is the main login page
             if config.options.logintype != 'alm':
@@ -278,7 +283,7 @@ def skoleLogin():
                 if not links:
                     config.log(u'Kan IKKE finde LOG PÅ MED UNILOGIN '
                                u'linket på siden?', -1)
-                    sys.exit(1)
+                    sys.exit(config.EXIT_SITE_ERROR)
                 config.log(u'Går videre til uni-login', 3)
                 resp = br.follow_link(links[0])
                 continue
@@ -292,7 +297,7 @@ def skoleLogin():
                 except mechanize.ControlNotFoundError:
                     config.log(u'Kan IKKE finde ALM LOGIN på siden.', -1)
                     config.log(u'Skal du måske bruge unilogin i stedet?', -1)
-                    sys.exit(1)
+                    sys.exit(config.EXIT_LOGIN_FAILED)
 
                 resp = br.submit()
                 continue
@@ -303,7 +308,7 @@ def skoleLogin():
     config.log(u'skoleLogin: %s' % url, -1)
     config.log(u'skoleLogin: Check at URLen er rigtig '
                u'og prøv evt. igen senere', -1)
-    sys.exit(0)
+    sys.exit(config.EXIT_SITE_ERROR)
 
 
 def url2cacheFileName(url, postData):

@@ -9,6 +9,7 @@ import re
 import shutil
 import smtplib
 import socket
+import ssl
 import urllib.error
 import urllib.parse
 import time
@@ -321,12 +322,17 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
             shutil.rmtree(tdn)  # Remove stuff
         os.mkdir(tdn)
 
-        fd = open(os.path.join(tdn, mid + '.eml'), 'wb')
-        fd.write(self.asEmail().as_bytes())
-        fd.close()
+        # Med FSKINTRA_STORE_MESSAGES=marker gemmes kun selve kataloget, der
+        # markerer at beskeden er sendt (hasSentMessage ser kun på navnet) -
+        # ikke en kopi af indholdet (dataminimering)
+        if getattr(config.options, 'storemessages', 'full') != 'marker':
+            fd = open(os.path.join(tdn, mid + '.eml'), 'wb')
+            fd.write(self.asEmail().as_bytes())
+            fd.close()
 
-        with open(os.path.join(tdn, mid + '.json'), 'w', encoding='utf-8') as fd:
-            json.dump(self.mp, fd, sort_keys=True, indent=2, default=str)
+            with open(os.path.join(tdn, mid + '.json'), 'w',
+                      encoding='utf-8') as fd:
+                json.dump(self.mp, fd, sort_keys=True, indent=2, default=str)
 
         os.rename(tdn, dn)
         return True
@@ -599,24 +605,7 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
             return self.store()
 
         msg = self.asEmail()
-        # Open smtp connection
-        if config.options.smtphostname:
-            if config.options.smtpport == 465:
-                server = smtplib.SMTP_SSL(config.options.smtphostname,
-                                          config.options.smtpport)
-            else:
-                server = smtplib.SMTP(config.options.smtphostname,
-                                      config.options.smtpport)
-        else:
-            server = smtplib.SMTP('localhost')
-        # server.set_debuglevel(1)
-        if config.options.smtpusername:
-            try:
-                server.starttls()
-            except smtplib.SMTPException:
-                pass  # ok, but we tried...
-            server.login(config.options.smtpusername,
-                         config.options.smtppassword)
+        server = smtpConnect()
 
         try:
             try:
@@ -657,7 +646,55 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
 
     def _sendmail(self, server, msg):
         server.sendmail(config.options.senderemail,
-                        config.options.email, msg.as_string())
+                        recipients(), msg.as_string())
+
+
+def recipients():
+    '''Modtagerne som liste. config.options.email må indeholde flere
+    adresser adskilt med komma - smtplib opfatter en streng som én adresse'''
+    return [a.strip() for a in config.options.email.split(',') if a.strip()]
+
+
+def _sslContext():
+    '''SSL-kontekst til SMTP. Certifikatet tjekkes, medmindre
+    FSKINTRA_SMTP_VERIFY_SSL=false (fx en lokal server med et selvsigneret
+    certifikat) - forbindelsen er da stadig krypteret'''
+    context = ssl.create_default_context()
+    if str(getattr(config.options, 'smtpverifyssl', 'true')).lower() == \
+            'false':
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+    return context
+
+
+def smtpConnect():
+    '''Åbn (og log evt. på) en forbindelse til SMTP-serveren.
+
+    Kræver serveren login, sendes brugernavn/kodeord kun over en krypteret
+    forbindelse (SSL på port 465, ellers STARTTLS). Kan forbindelsen ikke
+    krypteres, fejler afsendelsen i stedet for at sende kodeordet i
+    klartekst.'''
+    host = config.options.smtphostname or 'localhost'
+    port = config.options.smtpport if config.options.smtphostname else 25
+
+    if port == 465:
+        server = smtplib.SMTP_SSL(host, port, context=_sslContext())
+    else:
+        server = smtplib.SMTP(host, port)
+    # server.set_debuglevel(1)
+
+    if config.options.smtpusername:
+        if port != 465:
+            # Kaster en exception hvis serveren ikke understøtter STARTTLS
+            # eller certifikatet er ugyldigt - login må ikke ske ukrypteret
+            try:
+                server.starttls(context=_sslContext())
+            except Exception:
+                server.close()
+                raise
+        server.login(config.options.smtpusername,
+                     config.options.smtppassword)
+    return server
 
 
 def hasSentMessage(date='', tp='', md5='', mid=''):

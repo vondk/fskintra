@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import json
+
 import skoleintra.config
 import skoleintra.schildren
 import skoleintra.snotifications
@@ -17,6 +19,13 @@ import skoleintra.soverview
 
 def main(argv=None):
     skoleintra.config.parseArgs(argv)
+
+    if skoleintra.config.options.checklogin:
+        # Log blot ind og vis hvilke børn der er adgang til. Fejler login,
+        # afsluttes med config.EXIT_LOGIN_FAILED/EXIT_SITE_ERROR
+        cnames = skoleintra.schildren.getChildren()
+        print(json.dumps({'children': cnames}, ensure_ascii=False))
+        return
 
     if skoleintra.config.options.overviewonly:
         # Genbyg kun skoleoverblikket ud fra tidligere hentede ugeplaner
