@@ -163,3 +163,17 @@ def test_login_exit_codes(options, monkeypatch, path, data, code):
     with pytest.raises(SystemExit) as e:
         surllib.skoleLogin()
     assert e.value.code == code
+
+
+def test_no_connection_gives_site_error(options, monkeypatch):
+    import urllib.error
+
+    class NoNet(_Browser):
+        def open(self, url):
+            raise urllib.error.URLError('Name or service not known')
+    options.logintype, options.username, options.password = 'alm', 'x', 'y'
+    monkeypatch.setattr(surllib, '_skole_login_done', False)
+    monkeypatch.setattr(surllib, 'getBrowser', lambda: NoNet(None))
+    with pytest.raises(SystemExit) as e:
+        surllib.skoleLogin()
+    assert e.value.code == config.EXIT_SITE_ERROR

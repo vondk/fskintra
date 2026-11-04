@@ -190,6 +190,11 @@ def skoleLogin():
         config.log(u'skoleLogin: Check at URLen er rigtig '
                    u'og prøv evt. igen senere', -1)
         sys.exit(config.EXIT_SITE_ERROR)
+    except urllib.error.URLError as e:
+        # Fx DNS-fejl eller ingen forbindelse - prøv igen senere
+        config.log(u'skoleLogin: Kan ikke få forbindelse til %s: %s'
+                   % (config.options.hostname, e.reason), -1)
+        sys.exit(config.EXIT_SITE_ERROR)
 
     N = 6
     for round in range(N):  # try at most N times before failing
