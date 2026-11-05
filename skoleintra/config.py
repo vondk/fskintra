@@ -145,7 +145,14 @@ ENV_OPTIONS = (
      u'MQTT-brugernavn (tom hvis brokeren tillader anonyme)'),
     (u'mqttpassword', u'MQTT_PASSWORD',
      re.compile(r''), u'',
-     u'MQTT-kodeord'))
+     u'MQTT-kodeord'),
+    # Valgfrit: skoleoverblikket som JSON-fil, fx til en webside eller en
+    # egen automatisering. Virker uden Home Assistant
+    (u'overviewjson', u'OVERVIEW_JSON',
+     re.compile(r'^[^\x00]*$'), u'',
+     u'Fil som skoleoverblikket skrives til som JSON, fx '
+     u'/data/overblik.json - en relativ sti regnes fra FSKINTRA_ROOT '
+     u'(tom = ingen fil)'))
 
 # Indstillinger der aldrig må skrives på skærmen
 SECRET_OPTIONS = ('smtppassword', 'anthropicapikey', 'hatoken',
@@ -155,7 +162,8 @@ SECRET_OPTIONS = ('smtppassword', 'anthropicapikey', 'hatoken',
 # funktionen fra - den må aldrig stoppe afsendelsen af mails
 SOFT_OPTIONS = ('subjectprefix', 'anthropicapikey', 'aimodel', 'haurl',
                 'hatoken', 'haentity', 'hatodo', 'hacalendar', 'haverifyssl',
-                'mqtthost', 'mqttport', 'mqttuser', 'mqttpassword')
+                'mqtthost', 'mqttport', 'mqttuser', 'mqttpassword',
+                'overviewjson')
 
 
 def envName(name):
@@ -496,7 +504,8 @@ https://github.com/svalgaard/fskintra/
         dest='overviewonly', default=False,
         action='store_true',
         help=u'Hent intet - genbyg kun skoleoverblikket ud fra tidligere '
-             u'hentede ugeplaner og send det til Home Assistant')
+             u'hentede ugeplaner og send det til Home Assistant og/eller '
+             u'FSKINTRA_OVERVIEW_JSON')
 
     group = parser.add_argument_group('Diverse')
     group.add_argument(

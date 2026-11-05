@@ -109,6 +109,11 @@ def setLastChange(cname, wid, title, diff, summary):
     save()
 
 
+def children():
+    '''Børn med mindst én gemt ugeplan, sorteret'''
+    return sorted(load()['weekplans'])
+
+
 def lastChanges():
     '''Liste af (barn, ændring) - nyeste først'''
     changes = load()['last_change'].items()
