@@ -31,6 +31,7 @@ Alt styres med miljøvariabler (se også `fskintra.env.example`):
 | `FSKINTRA_MQTT_HOST` | (tom) | MQTT-broker, fx `192.168.1.25`. Anbefalet, se nedenfor |
 | `FSKINTRA_MQTT_PORT` | `1883` | Brokerens port |
 | `FSKINTRA_MQTT_USER` / `_PASSWORD` | (tom) | Kun hvis brokeren kræver login |
+| `FSKINTRA_OVERVIEW_JSON` | (tom) | Skriv overblikket som JSON til denne fil. Relativ sti regnes fra `FSKINTRA_ROOT`. Kræver ikke Home Assistant |
 
 ### API-nøgle til Claude
 
@@ -124,6 +125,49 @@ fskintra husker selv hvad det har oprettet og rører kun det:
   af).
 * Afkrydsede punkter fjernes når forfaldsdatoen er passeret. Ikke-afkrydsede
   bliver stående som forfaldne. Fortidige kalenderbegivenheder bevares.
+
+### Overblikket som JSON-fil
+
+Med `FSKINTRA_OVERVIEW_JSON` skrives overblikket også (eller kun) til en
+JSON-fil, fx til en webside, en egen automatisering eller
+[fskintra-hosted](https://github.com/vondk/fskintra-hosted). Det virker
+uden Home Assistant. Filen skrives atomisk efter hver kørsel, hvor
+ForældreIntra har noget nyt, og ved `--overview-only`.
+
+```json
+{
+ "version": 1,
+ "dato": "2026-11-02",
+ "opdateret": "2026-11-02T16:35:12",
+ "kilde": "regler",
+ "overskrift": "1 lektie",
+ "boern": ["Alma 5C"],
+ "punkter": [
+  {"id": "Alma 5C|2026-11-06|Matematik|0", "barn": "Alma 5C",
+   "dato": "2026-11-06", "uge": "45-2026", "fag": "Matematik",
+   "kategori": "lektie", "kort": "Aflever ugeopgave nr. 2",
+   "tekst": "Lektie: Aflever ugeopgave nr.2 - regnestykkerne på arket ..."}
+ ],
+ "seneste_aendring": [
+  {"barn": "Alma 5C", "tidspunkt": "2026-11-02T16:35:10", "uge": "45-2026",
+   "titel": "Ugeplan for 4B - uge 45-2026", "resume": null,
+   "ny_ugeplan": false,
+   "aendringer": [{"status": "tilføjet", "dato": "2026-11-02",
+                   "fag": "Matematik", "tekst": "..."}]}
+ ]
+}
+```
+
+* `punkter` indeholder alt fra `dato` og frem, også almindelig
+  undervisning (`kategori` = `info`). Kategorierne er `lektie`,
+  `aflevering`, `medbring`, `tur`, `ændret_tid` og `info`.
+* `id` er stabilt, selv om teksten rettes i ugeplanen, og er det samme som
+  to-do- og kalendersynkroniseringen bruger. Brug det til at huske fx
+  afkrydsning.
+* `dato` på et punkt er `null` for ugens generelle plan.
+* `kort` er AI-forkortet, hvis AI er slået til, ellers hele teksten på én
+  linje. `kilde` er `ai` eller `regler`.
+* `version` tælles op ved ændringer, der ikke er bagudkompatible.
 
 ## Mailtråde
 
