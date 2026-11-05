@@ -94,6 +94,7 @@ via miljøvariabler:
 | ```FSKINTRA_SMTP_PASSWORD``` | SMTP password (tom hvis login ikke er påkrævet) | *tom* |
 | ```FSKINTRA_SMTP_VERIFY_SSL``` | Tjek SMTP-serverens SSL-certifikat. ```false``` kun ved en lokal server med selvsigneret certifikat | ```true``` |
 | ```FSKINTRA_STORE_MESSAGES``` | ```full``` gemmer en kopi af hver sendt mail i ```msg```-kataloget, ```marker``` gemmer kun en markering af at den er sendt | ```full``` |
+| ```FSKINTRA_SUBJECT_PREFIX``` | Tekst foran emnet på alle mails, fx ```[Lokal]``` - praktisk hvis flere installationer sender til samme modtager | *tom* |
 
 ```FSKINTRA_SMTP_USER``` og ```FSKINTRA_SMTP_PASSWORD``` skal enten begge
 angives eller begge udelades.
