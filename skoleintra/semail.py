@@ -529,6 +529,11 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
         title = self.mp['title']
         if self.mp['children']:
             title = u'[%s] %s' % (', '.join(self.mp['children']), title)
+        # FSKINTRA_SUBJECT_PREFIX - kun i selve mailen, så md5 og dermed
+        # "allerede sendt"-tjekket ikke påvirkes
+        prefix = getattr(config.options, 'subjectprefix', u'')
+        if prefix:
+            title = u'%s %s' % (prefix, title)
         msg['Subject'] = headerEncodeField(title, 60)
         if 'sender' in self.mp and self.mp['sender']:
             # ProtonMail's SMTP parser does not handle RFC 2047 encoded-words

@@ -177,3 +177,12 @@ def test_no_connection_gives_site_error(options, monkeypatch):
     with pytest.raises(SystemExit) as e:
         surllib.skoleLogin()
     assert e.value.code == config.EXIT_SITE_ERROR
+
+
+def test_subject_prefix_from_env(env, monkeypatch):
+    _setProfileEnv(monkeypatch)
+    config.parseArgs([])
+    assert config.options.subjectprefix == u''
+    monkeypatch.setenv('FSKINTRA_SUBJECT_PREFIX', ' [Lokal] ')
+    config.parseArgs([])
+    assert config.options.subjectprefix == u'[Lokal]'
