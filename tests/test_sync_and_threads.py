@@ -295,3 +295,16 @@ def test_weekplan_versions_share_thread(monkeypatch):
 def test_slugify():
     assert semail.slugify(u'Alma 5C') == 'alma-5c'
     assert semail.slugify(u'Søren Åge') == 'soeren-aage'
+
+
+def test_subject_prefix(options):
+    from email.header import decode_header, make_header
+    msg = semail.Message(CHILD, 'pln', u'<p>x</p>')
+    msg.setTitle(u'Uge 45')
+
+    def subject():
+        msg._email = None
+        return str(make_header(decode_header(msg.asEmail()['Subject'])))
+    assert subject() == u'[Alma 5C] Uge 45'
+    options.subjectprefix = u'[Lokal]'
+    assert subject() == u'[Lokal] [Alma 5C] Uge 45'

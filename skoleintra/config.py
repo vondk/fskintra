@@ -94,6 +94,11 @@ ENV_OPTIONS = (
      re.compile(r'^(full|marker)$'), u'full',
      u"Gem en kopi af hver sendt mail ('full') eller kun en markering af "
      u"at den er sendt ('marker')"),
+    # Valgfri tekst foran emnet på alle mails - fx til at skelne mails fra
+    # en lokal installation fra mails fra en hostet
+    (u'subjectprefix', u'SUBJECT_PREFIX',
+     re.compile(r'^[^\r\n]*$'), u'',
+     u"Tekst foran emnet på alle mails, fx '[Lokal]' (tom = intet præfiks)"),
     # Valgfri: AI-resuméer via Claude API og overblik i Home Assistant.
     # Tomme værdier slår funktionen fra - mails sendes som hidtil.
     (u'anthropicapikey', u'ANTHROPIC_API_KEY',
@@ -155,9 +160,10 @@ SECRET_OPTIONS = ('smtppassword', 'anthropicapikey', 'hatoken',
 
 # Valgfrie funktioner: en ugyldig værdi giver kun en advarsel og slår
 # funktionen fra - den må aldrig stoppe afsendelsen af mails
-SOFT_OPTIONS = ('anthropicapikey', 'aimodel', 'haurl', 'hatoken', 'haentity',
-                'hatodo', 'hacalendar', 'haverifyssl', 'mqtthost', 'mqttport',
-                'mqttuser', 'mqttpassword', 'overviewjson')
+SOFT_OPTIONS = ('subjectprefix', 'anthropicapikey', 'aimodel', 'haurl',
+                'hatoken', 'haentity', 'hatodo', 'hacalendar', 'haverifyssl',
+                'mqtthost', 'mqttport', 'mqttuser', 'mqttpassword',
+                'overviewjson')
 
 
 def envName(name):
