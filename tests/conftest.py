@@ -76,6 +76,7 @@ def options(tmp_path, monkeypatch):
         mqttport='1883',
         mqttuser='',
         mqttpassword='',
+        overviewjson='',
     )
     for name in ('cache', 'msg', 'state'):
         dn = tmp_path / name
