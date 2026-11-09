@@ -88,14 +88,15 @@ def _publish(state, attributes):
     return smqtt.publishOverview(entity, state, attributes)
 
 
-def update():
-    '''Byg overblikket og send det til Home Assistant. Må aldrig fejle'''
+def update(today=None):
+    '''Byg overblikket og send det til Home Assistant. Må aldrig fejle.
+    today: kun til tests (standard er dags dato)'''
     if not (shass.isEnabled() or smqtt.isEnabled()):
         config.log(u'Home Assistant er ikke sat op - springer overblik over',
                    2)
         return False
     try:
-        today = datetime.date.today()
+        today = today or datetime.date.today()
         state, attributes, entries = _build(today)
         ok = _publish(state, attributes)
         # Lektier -> to-do, ture -> kalender (kræver REST, uafhængigt af
