@@ -6,7 +6,7 @@ ForældreIntra er en del af SkoleIntra, der brugers af næsten alle danske folke
 * Forsiden: Nyheder på opslagstavlen inkl. fødselsdage
 * Beskeder (både sendt og modtaget)
 * Dokumenter
-* Billeder
+* Billeder (som vedhæftede filer, 5 pr. email)
 * Lektier
 * Tilmeldinger til samtaler og arrangementer
 

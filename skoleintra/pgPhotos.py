@@ -4,6 +4,7 @@ import glob
 import json
 import hashlib
 import os
+import re
 
 from . import config
 from . import sbs4
@@ -14,6 +15,19 @@ from . import surllib
 SECTION = 'pht'
 MAX_CACHE_AGE = .99
 PHOTOS_PER_EMAIL = 5
+
+
+def photoNames(title, photos):
+    '''Filnavne uden endelse til de vedhæftede billeder, fx "Halloween 03".
+    Numrene følger rækkefølgen i albummet, så de fortsætter på tværs af
+    mails med PHOTOS_PER_EMAIL billeder'''
+    base = re.sub(r'[\\/:*?"<>|]+', u'-', title)
+    base = u' '.join(base.split()).strip(u' .-') or u'Billede'
+    width = max(2, len(str(len(photos))))
+    names = {}
+    for i, url in enumerate(photos):
+        names.setdefault(url, u'%s %0*d' % (base, width, i + 1))
+    return names
 
 
 def sendPhotos(cname, title, mid, photos):
@@ -40,6 +54,8 @@ def sendPhotos(cname, title, mid, photos):
         # At most 5 pictures has been sent earlier - send them all again
         pending = photos
 
+    names = photoNames(title, photos)
+
     # Send the photos in e-mails of PHOTOS_PER_EMAIL pictures
     ecount = (len(pending)-1) // PHOTOS_PER_EMAIL + 1
 
@@ -47,7 +63,9 @@ def sendPhotos(cname, title, mid, photos):
         pics = pending[:PHOTOS_PER_EMAIL]
         del pending[:PHOTOS_PER_EMAIL]
 
-        # Create HTML snippet
+        # Create HTML snippet. Den skal forblive uændret, da den indgår i md5
+        # (ellers gensendes alle album). <img> laves om til vedhæftede filer
+        # af semail via setImagesAsAttachments()
         itag = u'<img style="max-width: 100%">'
         ebs = sbs4.beautify(u'<h2></h2><p>%s</p>' %
                             u'<br/>'.join([itag] * len(pics)))
@@ -62,6 +80,7 @@ def sendPhotos(cname, title, mid, photos):
             msg.setTitle(u'Billeder: %s' % title)
         msg.setMessageID(mid)
         msg.setData(pics)
+        msg.setImagesAsAttachments(names)
         msg.maybeSend()
 
 
