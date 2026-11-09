@@ -223,7 +223,8 @@ def test_overview_retries_ai_after_failure(fake_ai):
 
 def test_update_pushes_to_ha(ha):
     sstate.putWeekplan(CHILD, WID, u'Uge 45', items('c'), 'x')
-    assert soverview.update() is True
+    # Fast dato i uge 45 - ellers forsvinder punkterne når ugen er gået
+    assert soverview.update(datetime.date(2026, 11, 2)) is True
     (path, _, body), = ha.requests
     assert path == '/api/states/sensor.skoleintra_overblik'
     assert u'## Alma 5C' in body['attributes']['markdown']

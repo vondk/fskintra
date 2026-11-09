@@ -131,8 +131,9 @@ fskintra husker selv hvad det har oprettet og rører kun det:
 Med `FSKINTRA_OVERVIEW_JSON` skrives overblikket også (eller kun) til en
 JSON-fil, fx til en webside, en egen automatisering eller
 [fskintra-hosted](https://github.com/vondk/fskintra-hosted). Det virker
-uden Home Assistant. Filen skrives atomisk efter hver kørsel, hvor
-ForældreIntra har noget nyt, og ved `--overview-only`.
+uden Home Assistant. Filen skrives atomisk efter hver kørsel og ved
+`--overview-only`. Fejler en kørsel (fx afvist login), beholder filen
+indholdet fra sidste gode kørsel.
 
 ```json
 {

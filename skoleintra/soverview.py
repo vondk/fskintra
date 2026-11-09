@@ -183,7 +183,8 @@ def writeExport(path, data):
 
 def update(today=None):
     '''Byg overblikket og send det til Home Assistant og/eller skriv det
-    som JSON. Må aldrig fejle'''
+    som JSON. Må aldrig fejle.
+    today: kun til tests (standard er dags dato)'''
     ha = shass.isEnabled() or smqtt.isEnabled()
     path = exportPath()
     if not (ha or path):

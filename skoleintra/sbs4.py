@@ -71,6 +71,13 @@ def deobfuscateEmail(s):
     return mail
 
 
+CF_MODIFIED = 'data-cf-modified-'
+CF_UNBLOCK = re.compile(
+    r'^\s*if\s*\(\s*!\s*window\.__cfRLUnblockHandlers\s*\)\s*'
+    r'return\s+false\s*;\s*')
+CF_SCRIPT_TYPE = re.compile(r'^[0-9a-f]+-(?=[a-z]+/)')
+
+
 def cleanupSoup(bs):
     '''Cleanup/deobfuscate the soup'''
 
@@ -98,6 +105,19 @@ def cleanupSoup(bs):
             tag['href'] = 'mailto:' + email
         else:
             tag.unwrap()
+
+    # Cloudflare Rocket Loader omskriver inline-handlers og scripts med en
+    # nøgle, der er ny ved hver sidevisning. Den ender i beskedens HTML og
+    # dermed i md5, så den samme besked ellers sendes igen ved hver kørsel
+    for tag in bs.find_all(True):
+        for attr in list(tag.attrs):
+            if attr.startswith(CF_MODIFIED):
+                del tag[attr]
+            elif attr.startswith('on') and isinstance(tag[attr], str):
+                tag[attr] = CF_UNBLOCK.sub('', tag[attr])
+        if tag.name == 'script' and tag.has_attr('data-cf-settings'):
+            del tag['data-cf-settings']
+            tag['type'] = CF_SCRIPT_TYPE.sub('', tag.get('type', ''))
 
     BLOCKED = 'blocked::'
     for tag in bs.find_all('a', title=re.compile('^%s.*' % BLOCKED)):
