@@ -31,19 +31,40 @@ from email.mime.image import MIMEImage
 add_charset('utf-8', QP, QP, 'utf-8')
 
 
-def _isImage(data):
-    '''Lightweight replacement for the removed imghdr.what(): return True if
-    data looks like a known image format (by magic bytes)'''
+_IMAGE_SIGS = ((b'\xff\xd8\xff', 'jpg'),
+               (b'\x89PNG\r\n\x1a\n', 'png'),
+               (b'GIF87a', 'gif'), (b'GIF89a', 'gif'),
+               (b'BM', 'bmp'),
+               (b'II*\x00', 'tif'), (b'MM\x00*', 'tif'))
+
+
+def _imageType(data):
+    '''Lightweight replacement for the removed imghdr.what(): return the
+    file extension (e.g. 'jpg') if data looks like a known image format (by
+    magic bytes), otherwise None'''
     if not data:
-        return False
+        return None
     if data[:4] == b'RIFF' and data[8:12] == b'WEBP':
-        return True
-    sigs = (b'\xff\xd8\xff',            # jpeg
-            b'\x89PNG\r\n\x1a\n',       # png
-            b'GIF87a', b'GIF89a',       # gif
-            b'BM',                      # bmp
-            b'II*\x00', b'MM\x00*')     # tiff
-    return any(data.startswith(s) for s in sigs)
+        return 'webp'
+    for sig, ext in _IMAGE_SIGS:
+        if data.startswith(sig):
+            return ext
+    return None
+
+
+def _isImage(data):
+    return _imageType(data) is not None
+
+
+def generateImageAttachment(data, ext, filename):
+    '''Billede som vedhæftet fil. ext er filendelsen fra _imageType().
+    Filnavnet kodes efter RFC 2231, så æøå og lange navne ikke foldes'''
+    subtype = {'jpg': 'jpeg', 'tif': 'tiff'}.get(ext, ext)
+    msg = MIMEImage(data, _subtype=subtype)
+    fn = u'%s.%s' % (filename, ext)
+    msg.add_header('Content-Disposition', 'attachment', filename=fn)
+    msg.set_param('name', fn)
+    return msg
 
 
 def headerEncodeField(f, maxlinelen=40):
@@ -157,6 +178,9 @@ class Message:
         # besked selv er roden. Bruges til Message-ID/References
         self.mp['thread'] = None
         self.mp['thread_root'] = False
+        # URL -> filnavn (uden endelse) for billeder, der skal vedhæftes som
+        # filer i stedet for at blive indlejret. Se setImagesAsAttachments()
+        self._imageNames = None
         self._email = None
 
     def __repr__(self):
@@ -235,6 +259,16 @@ class Message:
         assert(isinstance(url, str))
         assert(isinstance(text, str))
         self.mp['attatchments'].append((surllib.absurl(url), text))
+
+    def setImagesAsAttachments(self, names):
+        '''Vedhæft <img>-billeder som filer i stedet for at indlejre dem.
+        names: URL -> filnavn uden endelse (endelsen findes ud fra
+        billeddata). Selve HTML'en - og dermed md5 - er uændret, så allerede
+        sendte beskeder ikke ligner nye. Billeder ud over størrelsesbudgettet
+        erstattes ved en 552-afvisning af et link, ligesom andre
+        vedhæftninger'''
+        self._imageNames = dict(names)
+        self._email = None
 
     def setData(self, data):
         self.mp['data'] = data
@@ -381,35 +415,6 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
 </html>''' % mpp
         html = sbs4.beautify(html)
 
-        # First look for inline images, if any
-        # iimags: mapping from URL to (cid, binary string contents)
-        iimgs = {}
-        for imgtag in html.findAll('img'):
-            if not imgtag.has_attr('src'):
-                continue  # ignore
-            url = imgtag['src']
-            if url.lower().startswith('data:'):
-                # ignore 'inline' images
-                continue
-            elif not url:
-                # ignore empty URLs
-                continue
-            if url not in iimgs:
-                try:
-                    data = surllib.skoleGetURL(url, False)
-                except urllib.error.URLError:
-                    # could not fetch URL for some reason - ignore
-                    continue
-                # is this actually an image?
-                if not _isImage(data):
-                    continue  # ignore
-                cid = 'image%d-%f@%s' % (len(iimgs) + 1, time.time(), hostname)
-                iimgs[url] = (cid, data)
-            cid, _ = iimgs[url]
-
-            imgtag['src'] = 'cid:' + cid
-
-        # Next, handle attachments
         # attachments: email attachments ready for attachment :)
         attachments = []
         # Når en tidligere send blev afvist som for stor, genopbygges asEmail()
@@ -434,6 +439,57 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
             config.log(u'Udelader stor vedhæftning (%d bytes)' % len(data), 2)
             return True
 
+        # First look for inline images, if any
+        # iimags: mapping from URL to (cid, binary string contents)
+        iimgs = {}
+        imageNames = self._imageNames or {}
+        # aimgs: URL -> filnavn for billeder vedhæftet som filer
+        aimgs = {}
+        for imgtag in html.findAll('img'):
+            if not imgtag.has_attr('src'):
+                continue  # ignore
+            url = imgtag['src']
+            if url.lower().startswith('data:'):
+                # ignore 'inline' images
+                continue
+            elif not url:
+                # ignore empty URLs
+                continue
+            if url in imageNames:
+                # Vedhæft som fil - billedet erstattes af filnavnet i teksten
+                if url not in aimgs:
+                    try:
+                        data = surllib.skoleGetURL(url, False)
+                    except urllib.error.URLError:
+                        continue
+                    ext = _imageType(data)
+                    if not ext:
+                        continue  # ikke et billede - ignorér
+                    fn = u'%s.%s' % (imageNames[url], ext)
+                    if tooBig(data):
+                        dropped.append((absUrl(url), fn))
+                    else:
+                        attachments.append(generateImageAttachment(
+                            data, ext, imageNames[url]))
+                    aimgs[url] = fn
+                imgtag.replace_with(aimgs[url])
+                continue
+            if url not in iimgs:
+                try:
+                    data = surllib.skoleGetURL(url, False)
+                except urllib.error.URLError:
+                    # could not fetch URL for some reason - ignore
+                    continue
+                # is this actually an image?
+                if not _isImage(data):
+                    continue  # ignore
+                cid = 'image%d-%f@%s' % (len(iimgs) + 1, time.time(), hostname)
+                iimgs[url] = (cid, data)
+            cid, _ = iimgs[url]
+
+            imgtag['src'] = 'cid:' + cid
+
+        # Next, handle attachments
         for atag in html.findAll('a'):
             try:
                 url = atag['href']
