@@ -12,7 +12,7 @@ Derudover kan fskintra samle alt aktuelt for alle børn, fra i dag og frem, i
 én sensor i Home Assistant, der vises som et markdown-kort.
 
 Begge dele virker uden AI. Med en API-nøgle til Claude får boksen et kort
-resumé, og overblikket får en overskrift og kortere tekster.
+resumé, og overblikket får kortere tekster og mere præcise kategorier.
 
 ## Opsætning
 
@@ -22,6 +22,7 @@ Alt styres med miljøvariabler (se også `fskintra.env.example`):
 |---|---|---|
 | `FSKINTRA_ANTHROPIC_API_KEY` | (tom) | API-nøgle fra console.anthropic.com. Tom = ingen AI |
 | `FSKINTRA_AI_MODEL` | `claude-opus-5-5` | Claude-model, fx `claude-haiku-5-5` for lav pris |
+| `FSKINTRA_AI_BASE_URL` | (tom) | Anden adresse til Claude API, fx en lokal proxy med cache. Tom = api.anthropic.com |
 | `FSKINTRA_HA_URL` | (tom) | Fx `http://homeassistant.local:8123`. Tom = intet overblik |
 | `FSKINTRA_HA_TOKEN` | (tom) | Long-lived access token (Profil → Sikkerhed i Home Assistant) |
 | `FSKINTRA_HA_ENTITY` | `sensor.skoleintra_overblik` | Sensoren der opdateres |
@@ -44,9 +45,12 @@ forudbetalt:
    *spend limit*, så en lækket nøgle højst kan koste det beløb.
 3. Opret en API-nøgle og sæt den som `FSKINTRA_ANTHROPIC_API_KEY`.
 
-AI kaldes kun når der faktisk er nyt: én gang pr. ændret ugeplan og én gang
-når overblikket ændrer sig (eller ved datoskift). Ugeplanernes tekst sendes
-til Anthropics API. Fejler AI-kaldet (fx ingen forbindelse), sendes mailen
+AI kaldes kun når der faktisk er nyt: ved en ændret ugeplan én gang til
+resuméet i mailen og én gang til overblikket. Overblikket kalder ikke AI
+igen, før ugeplanen ændres - heller ikke ved datoskift. Ugeplanernes tekst
+sendes til Anthropics API, uden barnets navn. Forespørgslen er derfor den
+samme for alle i klassen, så en proxy med cache (`FSKINTRA_AI_BASE_URL`)
+kan nøjes med ét kald pr. klasse. Fejler AI-kaldet (fx ingen forbindelse), sendes mailen
 stadig, blot uden resumé.
 
 ### Home Assistant

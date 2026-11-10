@@ -3,8 +3,11 @@
 og sender dem til Home Assistant som én sensor med markdown i attributterne
 og/eller skriver dem som JSON til en fil (FSKINTRA_OVERVIEW_JSON).
 
-Overblikket genereres kun med AI når indholdet (eller datoen) har ændret
-sig. Det seneste resultat caches i state-filen og sendes til Home
+AI bruges én gang pr. version af en ugeplan (kategori og kort tekst pr.
+punkt) - ikke pr. dag og ikke pr. barn. Svaret caches i state-filen, og
+da prompten kun indeholder selve ugeplanen, kan en fælles cache foran
+API'et (FSKINTRA_AI_BASE_URL) genbruge det for alle i samme klasse.
+Overskriften laves med regler. Det seneste overblik sendes til Home
 Assistant ved hver kørsel, så sensoren genopstår efter en HA-genstart.
 '''
 
@@ -39,6 +42,45 @@ def build(today=None):
     return _build(today or datetime.date.today())[:2]
 
 
+def _planHash(plan):
+    data = json.dumps({'title': plan.get('title'), 'items': plan['items'],
+                       'model': sai.model()},
+                      sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(data.encode('utf-8')).hexdigest()
+
+
+def _classify(items, cached):
+    '''AI-svar for de ugeplaner, items kommer fra.
+
+    Returnerer (ai, plans): ai har samme form som før (id er indeks i
+    items) eller er None, og plans er {hash: svar} til cachen. Et svar,
+    der mangler (fx API nede), prøves igen ved næste kørsel'''
+    if not sai.isEnabled():
+        return None, {}
+    plans = {}
+    hashes = {}
+    for it in items:
+        key = (it['child'], it['week'])
+        if key in hashes:
+            continue
+        plan = sstate.getWeekplan(*key)
+        h = hashes[key] = _planHash(plan)
+        if h not in plans:
+            res = cached.get(h)
+            if res is None:
+                res = sai.classifyPlan(plan.get('title') or u'',
+                                       plan['items'])
+            plans[h] = res
+    ai = {'kategorier': {}, 'tekster': {}}
+    for i, it in enumerate(items):
+        res = plans[hashes[(it['child'], it['week'])]] or {}
+        for field in ('kategorier', 'tekster'):
+            value = res.get(field, {}).get(str(it['idx']))
+            if value:
+                ai[field][str(i)] = value
+    return (ai if any(plans.values()) else None), plans
+
+
 def _build(today):
     '''Byg overblikket. Returnerer (state, attributes, entries)'''
     sstate.prune(today)
@@ -46,17 +88,14 @@ def _build(today):
 
     cache = sstate.getOverviewCache()
     inputHash = _inputHash(items, today)
-    stale = cache.get('input_hash') != inputHash
-    # Sidste AI-forsøg fejlede (fx API nede) - prøv igen ved denne kørsel
-    retry = (not stale and cache.get('ai') is None and sai.isEnabled() and
-             bool(items))
-    if stale or retry:
-        sstate.setOverviewCache(inputHash, sai.buildOverview(items))
+    cached = cache.get('plans')
+    ai, plans = _classify(items, cached if isinstance(cached, dict) else {})
+    if cache.get('input_hash') != inputHash or cached != plans:
+        sstate.setOverviewCache(inputHash, plans)
         cache = sstate.getOverviewCache()
-    ai = cache.get('ai')
 
     entries = ssummary.overviewEntries(items, ai)
-    headline = (ai or {}).get('overskrift') or ssummary.ruleHeadline(entries)
+    headline = ssummary.ruleHeadline(entries)
     markdown = ssummary.renderOverview(entries, today)
     generated = cache.get('generated') or u''
     markdown += u'\n\n_Opdateret %s%s_' % (
