@@ -109,6 +109,10 @@ ENV_OPTIONS = (
      re.compile(r'^[-.a-z0-9]+$'), u'claude-opus-5-5',
      u'Claude-model til AI-resuméer, fx claude-opus-5-5 eller '
      u'claude-haiku-5-5'),
+    (u'aibaseurl', u'AI_BASE_URL',
+     re.compile(r'^(https?://\S+)?$'), u'',
+     u'Anden adresse til Claude API, fx en lokal proxy med cache '
+     u'(tom = api.anthropic.com)'),
     (u'haurl', u'HA_URL',
      re.compile(r'^(https?://\S+)?$'), u'',
      u'Home Assistant URL, fx http://homeassistant.local:8123 '
@@ -160,7 +164,8 @@ SECRET_OPTIONS = ('smtppassword', 'anthropicapikey', 'hatoken',
 
 # Valgfrie funktioner: en ugyldig værdi giver kun en advarsel og slår
 # funktionen fra - den må aldrig stoppe afsendelsen af mails
-SOFT_OPTIONS = ('subjectprefix', 'anthropicapikey', 'aimodel', 'haurl',
+SOFT_OPTIONS = ('subjectprefix', 'anthropicapikey', 'aimodel', 'aibaseurl',
+                'haurl',
                 'hatoken', 'haentity', 'hatodo', 'hacalendar', 'haverifyssl',
                 'mqtthost', 'mqttport', 'mqttuser', 'mqttpassword',
                 'overviewjson')

@@ -10,7 +10,7 @@ Struktur:
     "version": 1,
     "weekplans": {BARN: {UGE: {"title", "items", "md5", "updated"}}},
     "last_change": {BARN: {"when", "week", "title", "diff", "summary"}},
-    "overview": {"input_hash", "ai", "generated"},
+    "overview": {"input_hash", "plans": {HASH: AI-SVAR}, "generated"},
     "sync": {"todo": {NØGLE: {...}}, "calendar": {NØGLE: {...}}}
   }
 '''
@@ -137,7 +137,7 @@ def prune(today, keepDays=14):
 def activeItems(today):
     '''Alle punkter fra i dag og frem (plus 'Generelt' for indeværende og
     kommende uger), for alle børn. Hvert punkt får ekstra nøglerne child,
-    week og weektitle. Sorteret efter barn, dato'''
+    week, weektitle og idx. Sorteret efter barn, dato'''
     res = []
     iso = today.isoformat()
     for cname in sorted(load()['weekplans']):
@@ -146,10 +146,12 @@ def activeItems(today):
             monday = weekMonday(wid)
             if monday and monday + datetime.timedelta(days=6) < today:
                 continue  # Hele ugen er overstået
-            for item in plans[wid].get('items', []):
+            for idx, item in enumerate(plans[wid].get('items', [])):
                 if item.get('date') and item['date'] < iso:
                     continue
                 entry = dict(item)
+                # Punktets plads i ugeplanen (id over for AI)
+                entry['idx'] = idx
                 entry['child'] = cname
                 entry['week'] = wid
                 entry['weektitle'] = plans[wid].get('title', u'')
@@ -161,8 +163,8 @@ def getOverviewCache():
     return load()['overview']
 
 
-def setOverviewCache(inputHash, ai):
-    load()['overview'] = {'input_hash': inputHash, 'ai': ai,
+def setOverviewCache(inputHash, plans):
+    load()['overview'] = {'input_hash': inputHash, 'plans': plans,
                           'generated': _now()}
     save()
 

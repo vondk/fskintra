@@ -17,12 +17,6 @@ def items(version):
     return pgWeekplans.extractItems(plan(version), WID)
 
 
-def active(version):
-    '''Punkter som sstate.activeItems leverer dem til overblikket'''
-    return [dict(i, child=CHILD, week=WID, weektitle=u'Uge 45')
-            for i in items(version)]
-
-
 class FakeClient:
     '''Erstatning for anthropic.Anthropic - returnerer et fast svar eller
     kaster en fejl, og husker kaldene'''
@@ -65,7 +59,7 @@ def fake_ai(monkeypatch, options):
 def test_disabled_without_key():
     diff = sdiff.diffItems(items('a'), items('b'))
     assert sai.summarizeChange(CHILD, u'Uge 45', diff, items('b')) is None
-    assert sai.buildOverview(active('b')) is None
+    assert sai.classifyPlan(u'Uge 45', items('b')) is None
 
 
 def test_summarize_change_request_and_result(fake_ai):
@@ -85,14 +79,15 @@ def test_summarize_change_request_and_result(fake_ai):
     assert call['fallbacks'] == 'default'
     assert call['betas'] == ['server-side-fallback-2026-07-01']
     prompt = call['messages'][0]['content']
+    assert CHILD not in prompt          # kan deles med resten af klassen
     assert u'[0] TILFØJET · Man 2/11 · Dansk' in prompt
     assert u'Resten af ugeplanen' in prompt and u'Lektie: Aflever' in prompt
 
 
 def test_haiku_has_no_fallbacks(fake_ai, options):
     options.aimodel = 'claude-haiku-5-5'
-    client = fake_ai(reply={'overskrift': u'x', 'punkter': []})
-    sai.buildOverview(active('b'))
+    client = fake_ai(reply={'punkter': []})
+    sai.classifyPlan(u'Uge 45', items('b'))
     assert 'fallbacks' not in client.calls[0]
     assert 'betas' not in client.calls[0]
 
@@ -103,14 +98,13 @@ def test_haiku_has_no_fallbacks(fake_ai, options):
     {'error': anthropic.APITimeoutError(
         request=httpx2.Request('POST', 'https://api.anthropic.com'))},
     {'error': RuntimeError('uventet')},
-    {'reply': {'overskrift': u'x', 'punkter': []}, 'stop_reason': 'refusal'},
-    {'reply': {'overskrift': u'x', 'punkter': []},
-     'stop_reason': 'max_tokens'},
+    {'reply': {'punkter': []}, 'stop_reason': 'refusal'},
+    {'reply': {'punkter': []}, 'stop_reason': 'max_tokens'},
     {'reply': None},
 ])
 def test_failures_return_none(fake_ai, kw):
     fake_ai(**kw)
-    assert sai.buildOverview(active('b')) is None
+    assert sai.classifyPlan(u'Uge 45', items('b')) is None
 
 
 def test_invalid_json_returns_none(fake_ai):
@@ -122,7 +116,7 @@ def test_invalid_json_returns_none(fake_ai):
                                content=[SimpleNamespace(type='text',
                                                         text='ikke json')])
     client.beta.messages.create = bad
-    assert sai.buildOverview(active('b')) is None
+    assert sai.classifyPlan(u'Uge 45', items('b')) is None
 
 
 class _Handler(http.server.BaseHTTPRequestHandler):
@@ -189,24 +183,66 @@ def test_overview_rule_based():
     assert [p['kategori'] for p in attrs['punkter']] == ['lektie']
 
 
-def test_overview_ai_is_cached_until_input_changes(fake_ai):
+def test_base_url_is_passed_to_client(options, monkeypatch):
+    seen = {}
+    monkeypatch.setattr(anthropic, 'Anthropic',
+                        lambda **kw: seen.update(kw) or 'klient')
+    assert sai._clientFactory('nøgle') == 'klient'
+    assert 'base_url' not in seen
+    options.aibaseurl = 'http://127.0.0.1:9191'
+    sai._clientFactory('nøgle')
+    assert seen['base_url'] == 'http://127.0.0.1:9191'
+
+
+def test_classify_plan_prompt_is_the_same_for_the_whole_class(fake_ai):
+    client = fake_ai(reply={'punkter': [
+        {'id': 3, 'kategori': 'aflevering', 'tekst': u'Aflever ugeopgave'},
+        {'id': 9, 'kategori': 'lektie', 'tekst': u'findes ikke'}]})
+    res = sai.classifyPlan(u'Ugeplan for 4B - uge 45-2026', items('c'))
+    assert res == {'kategorier': {'3': 'aflevering'},
+                   'tekster': {'3': u'Aflever ugeopgave'}}
+    call, = client.calls
+    prompt = call['messages'][0]['content']
+    # Hverken barn eller dags dato: samme ugeplan giver samme forespørgsel
+    assert CHILD not in prompt and u'I dag' not in prompt
+    assert u'[3] Fre 6/11 · Matematik: Lektie: Aflever' in prompt
+    schema = call['output_config']['format']['schema']
+    assert schema['required'] == ['punkter']
+
+
+def test_overview_ai_once_per_plan_version(fake_ai):
     sstate.putWeekplan(CHILD, WID, u'Uge 45', items('c'), 'x')
-    reply = {'overskrift': u'Fre: aflever ugeopgave nr. 2 (matematik)',
-             'punkter': [{'id': 3, 'kategori': 'aflevering',
+    reply = {'punkter': [{'id': 3, 'kategori': 'aflevering',
                           'tekst': u'Aflever ugeopgave nr. 2'}]}
     client = fake_ai(reply=reply)
     day = datetime.date(2026, 11, 2)
 
     state, attrs = soverview.build(day)
-    assert state == reply['overskrift']
+    assert state == u'1 aflevering'            # regelbaseret overskrift
     assert u'- Fre 6/11 · Matematik: Aflever ugeopgave nr. 2' in \
         attrs['markdown']
     assert attrs['kilde'] == u'ai'
 
     soverview.build(day)                       # samme input: ingen nyt kald
+    # Ny dag, samme ugeplan: mandagens punkter er væk, men id'erne passer
+    state, attrs = soverview.build(datetime.date(2026, 11, 5))
     assert len(client.calls) == 1
-    soverview.build(day + datetime.timedelta(days=1))   # ny dag: nyt kald
+    assert state == u'1 aflevering'
+    assert u'Aflever ugeopgave nr. 2' in attrs['markdown']
+
+    sstate.putWeekplan(CHILD, WID, u'Uge 45', items('b'), 'y')
+    soverview.build(day)                       # ny version: nyt kald
     assert len(client.calls) == 2
+
+
+def test_overview_siblings_in_same_class_share_one_call(fake_ai):
+    for child in (CHILD, u'Bo 5C'):
+        sstate.putWeekplan(child, WID, u'Uge 45', items('c'), 'x')
+    client = fake_ai(reply={'punkter': [
+        {'id': 3, 'kategori': 'aflevering', 'tekst': u'Aflever'}]})
+    state, attrs = soverview.build(datetime.date(2026, 11, 2))
+    assert len(client.calls) == 1
+    assert state == u'2 afleveringer'
 
 
 def test_overview_retries_ai_after_failure(fake_ai):
@@ -216,9 +252,11 @@ def test_overview_retries_ai_after_failure(fake_ai):
     state, attrs = soverview.build(day)
     assert attrs['kilde'] == u'regler'
     client.error = None
-    client.reply = {'overskrift': u'Nu virker det', 'punkter': []}
+    client.reply = {'punkter': [{'id': 3, 'kategori': 'aflevering',
+                                 'tekst': u'Nu virker det'}]}
     state, attrs = soverview.build(day)
-    assert state == u'Nu virker det' and len(client.calls) == 2
+    assert attrs['kilde'] == u'ai' and len(client.calls) == 2
+    assert u'Nu virker det' in attrs['markdown']
 
 
 def test_update_pushes_to_ha(ha):

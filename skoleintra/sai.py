@@ -52,7 +52,11 @@ Kategorier (vælg den der kræver mest handling fra forælder/barn):
 
 def _clientFactory(apiKey):
     import anthropic
-    return anthropic.Anthropic(api_key=apiKey, timeout=TIMEOUT, max_retries=2)
+    kwargs = dict(api_key=apiKey, timeout=TIMEOUT, max_retries=2)
+    baseUrl = getattr(config.options, 'aibaseurl', u'')
+    if baseUrl:
+        kwargs['base_url'] = baseUrl
+    return anthropic.Anthropic(**kwargs)
 
 
 def isEnabled():
@@ -79,15 +83,17 @@ def _schema(textField, textDesc, withItemText):
             'description': u'Kort omskrivning af punktet (højst ca. 100 '
                            u'tegn) uden dag og fag - kun hvad der står'}
         item['required'].append('tekst')
-    return {
+    schema = {
         'type': 'object',
-        'properties': {
-            textField: {'type': 'string', 'description': textDesc},
-            'punkter': {'type': 'array', 'items': item},
-        },
-        'required': [textField, 'punkter'],
+        'properties': {'punkter': {'type': 'array', 'items': item}},
+        'required': ['punkter'],
         'additionalProperties': False,
     }
+    if textField:
+        schema['properties'][textField] = {'type': 'string',
+                                           'description': textDesc}
+        schema['required'].insert(0, textField)
+    return schema
 
 
 def _call(prompt, schema):
@@ -163,8 +169,9 @@ def _normalize(data, textField, nItems):
     '''Tjek og normalisér et svar. Ukendte id'er ignoreres'''
     if not isinstance(data, dict):
         return None
-    res = {textField: str(data.get(textField) or u'').strip(),
-           'kategorier': {}, 'tekster': {}}
+    res = {'kategorier': {}, 'tekster': {}}
+    if textField:
+        res[textField] = str(data.get(textField) or u'').strip()
     for p in data.get('punkter') or []:
         try:
             pid = int(p['id'])
@@ -202,8 +209,10 @@ def summarizeChange(cname, title, diff, items):
     if not entries or not isEnabled():
         return None
 
-    lines = [u'Barn og klasse: %s' % cname,
-             u'Ugeplan: %s' % title,
+    # Barnets navn sendes ikke med: ugeplanen er den samme for hele
+    # klassen, så en cache foran API'et kan genbruge svaret på tværs af
+    # forældre i samme klasse
+    lines = [u'Ugeplan: %s' % title,
              u'I dag: %s' % _today(), u'']
     if diff['first']:
         lines.append(u'Vi har ikke set denne ugeplan før. Hele planen:')
@@ -234,25 +243,23 @@ def summarizeChange(cname, title, diff, items):
     return _normalize(data, 'resume', len(entries))
 
 
-def buildOverview(items):
-    '''Klassificér og omskriv alle aktuelle punkter til skoleoverblikket.
+def classifyPlan(title, items):
+    '''Klassificér og omskriv alle punkter i én ugeplan til skoleoverblikket.
 
-    Returnerer {'overskrift': str, 'kategorier': {id: kategori},
-    'tekster': {id: kort tekst}} hvor id er indeks i items - eller None'''
+    Prompten indeholder hverken barnets navn eller dags dato - kun selve
+    ugeplanen. Svaret gælder derfor for alle børn i klassen, lige så længe
+    ugeplanen er uændret, og kan genbruges (se soverview og
+    FSKINTRA_AI_BASE_URL).
+
+    Returnerer {'kategorier': {id: kategori}, 'tekster': {id: kort tekst}}
+    hvor id er indeks i items - eller None'''
     if not items or not isEnabled():
         return None
-    lines = [u'I dag: %s' % _today(), u'',
-             u'Aktuelle punkter fra ugeplanerne (barn · dag · fag · tekst):']
-    for i, it in enumerate(items):
-        lines.append(u'[%d] %s · %s: %s' % (
-            i, it['child'], ssummary.dayAndSubject(it), _itemText(it)))
+    lines = [u'Ugeplan: %s' % title, u'',
+             u'Alle punkter i ugeplanen (dag · fag · tekst):']
+    lines += [_line(i, it) for i, it in enumerate(items)]
     lines += [u'',
-              u'Opgave: Giv hvert punkt en kategori og en kort tekst. Skriv '
-              u'i "overskrift" én linje (højst 100 tegn) med det vigtigste '
-              u'forældrene skal huske de næste dage - fx "Fre: aflever '
-              u'ugeopgave nr. 2 (matematik)". Er der intet der kræver '
-              u'handling, så skriv "Intet særligt at huske".']
+              u'Opgave: Giv hvert punkt en kategori og en kort tekst.']
 
-    data = _call(u'\n'.join(lines),
-                 _schema('overskrift', u'Én linje, højst 100 tegn', True))
-    return _normalize(data, 'overskrift', len(items))
+    data = _call(u'\n'.join(lines), _schema(None, None, True))
+    return _normalize(data, None, len(items))

@@ -68,6 +68,7 @@ def options(tmp_path, monkeypatch):
         email='modtager@example.net',
         anthropicapikey='',
         aimodel='claude-opus-5-5',
+        aibaseurl='',
         haurl='',
         hatoken='',
         haentity='sensor.skoleintra_overblik',
