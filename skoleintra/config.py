@@ -466,7 +466,8 @@ def browserStatePath(opts=None):
 
 def maintenanceFlags(args):
     '''Flag, der kun arbejder på de gemte data: (flag, er det angivet?)'''
-    return (('--print-paths', args.printpaths),)
+    return (('--print-paths', args.printpaths),
+            ('--purge', args.purge))
 
 
 def readPathOptions(args, envMode):
@@ -577,6 +578,14 @@ https://github.com/svalgaard/fskintra/
         help=u'Skriv som JSON på stdout, hvor fskintra gemmer cache, '
              u'markeringer af sendte mails, tilstand og overblik, og afslut '
              u'- intet oprettes eller ændres')
+    group.add_argument(
+        '--purge', '--forget-everything',
+        dest='purge', default=False, action='store_true',
+        help=u'Slet alt, fskintra har gemt for denne %s og profil - cache '
+             u'(inkl. login-cookies), markeringer/kopier af sendte mails, '
+             u'tilstand og overblik - og afslut. Konfigurationsfilen '
+             u'slettes ikke. Næste kørsel bør være med --catch-up, ellers '
+             u'sendes alt igen' % envName('ROOT'))
 
     group = parser.add_argument_group('Diverse')
     group.add_argument(

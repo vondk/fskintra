@@ -3,6 +3,7 @@
 
 import datetime
 import json
+import sys
 
 import skoleintra.config
 import skoleintra.schildren
@@ -27,6 +28,18 @@ def main(argv=None):
         # Hvor ligger de gemte data? (stabil kontrakt for driftslag)
         print(json.dumps(skoleintra.sretention.paths(), ensure_ascii=False,
                          sort_keys=True))
+        return
+
+    if skoleintra.config.options.purge:
+        # Slet alt gemt for denne FSKINTRA_ROOT. Exit 0, også hvis der
+        # intet var at slette
+        removed, failed = skoleintra.sretention.purge()
+        for path, err in failed:
+            skoleintra.config.log(u'Kunne ikke slette %s: %s' % (path, err),
+                                  0)
+        print(json.dumps({'purged': removed}, ensure_ascii=False))
+        if failed:
+            sys.exit(skoleintra.config.EXIT_ERROR)
         return
 
     if skoleintra.config.options.checklogin:

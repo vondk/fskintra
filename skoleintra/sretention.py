@@ -7,6 +7,7 @@ med flagene her i stedet for selv at slette filer.
 '''
 
 import os
+import shutil
 
 from . import config
 from . import soverview
@@ -38,3 +39,38 @@ def paths():
         'browser_state': _abs(config.browserStatePath()),
         'overview_json': _abs(soverview.exportPath()),
     }
+
+
+def _remove(path):
+    '''Slet en fil eller et helt katalog. Et symbolsk link fjernes uden at
+    blive fulgt. Returnerer True, hvis der var noget at slette'''
+    if not os.path.lexists(path):
+        return False
+    if os.path.isdir(path) and not os.path.islink(path):
+        shutil.rmtree(path)
+    else:
+        os.unlink(path)
+    return True
+
+
+def purge():
+    '''Slet alt, fskintra har gemt for den aktuelle FSKINTRA_ROOT og
+    profil: cache (inkl. browser-tilstanden), markeringer/kopier af sendte
+    mails, tilstand (ugeplaner, seneste ændring, AI-svar) og overblikket.
+
+    Konfigurationsfilen røres ikke. Returnerer (slettet, fejl): de stier,
+    der blev slettet, og en liste af (sti, fejl) for dem, der ikke kunne'''
+    where = paths()
+    targets = [where['cachedir'], where['msgdir'], where['statedir']]
+    if where['overview_json']:
+        # .tmp er en evt. halvt skrevet fil fra en afbrudt kørsel
+        targets += [where['overview_json'], where['overview_json'] + '.tmp']
+    removed, failed = [], []
+    for path in targets:
+        try:
+            if _remove(path):
+                removed.append(path)
+        except OSError as e:
+            failed.append((path, e))
+    sstate.reset()
+    return removed, failed
