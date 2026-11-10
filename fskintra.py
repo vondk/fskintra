@@ -30,6 +30,12 @@ def main(argv=None):
                          sort_keys=True))
         return
 
+    if skoleintra.config.options.forgetlogin:
+        # Nulstil login: slet browser-tilstanden (cookies)
+        removed = skoleintra.sretention.forgetLogin()
+        print(json.dumps({'forgotten': removed}, ensure_ascii=False))
+        return
+
     if skoleintra.config.options.purge:
         # Slet alt gemt for denne FSKINTRA_ROOT. Exit 0, også hvis der
         # intet var at slette

@@ -6,6 +6,7 @@ Et driftslag, der kører fskintra for andre, skal ikke kende katalognavnene
 med flagene her i stedet for selv at slette filer.
 '''
 
+import glob
 import os
 import shutil
 
@@ -51,6 +52,29 @@ def _remove(path):
     else:
         os.unlink(path)
     return True
+
+
+def browserStateFiles():
+    '''Filer med browser-tilstand (<host>-<bruger>.state) i cachedir.
+
+    Kendes profilen, er det kun dens egen fil. Ellers - fx når et driftslag
+    kalder uden brugerens login - er det alle *.state direkte i cachedir'''
+    own = config.browserStatePath()
+    if own:
+        return [own] if os.path.lexists(own) else []
+    pattern = os.path.join(glob.escape(config.options.cachedir), '*.state')
+    return sorted(fn for fn in glob.glob(pattern) if os.path.isfile(fn))
+
+
+def forgetLogin():
+    '''Slet browser-tilstanden: cookies (også sessionscookies, der ellers
+    gemmes på ubestemt tid), sidst kendte forside-URL og headere. Næste
+    kørsel logger ind forfra. Returnerer de slettede filer'''
+    removed = []
+    for fn in browserStateFiles():
+        os.unlink(fn)
+        removed.append(os.path.abspath(fn))
+    return removed
 
 
 def purge():

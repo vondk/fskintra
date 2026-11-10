@@ -467,6 +467,7 @@ def browserStatePath(opts=None):
 def maintenanceFlags(args):
     '''Flag, der kun arbejder på de gemte data: (flag, er det angivet?)'''
     return (('--print-paths', args.printpaths),
+            ('--forget-login', args.forgetlogin),
             ('--purge', args.purge))
 
 
@@ -578,6 +579,11 @@ https://github.com/svalgaard/fskintra/
         help=u'Skriv som JSON på stdout, hvor fskintra gemmer cache, '
              u'markeringer af sendte mails, tilstand og overblik, og afslut '
              u'- intet oprettes eller ændres')
+    group.add_argument(
+        '--forget-login',
+        dest='forgetlogin', default=False, action='store_true',
+        help=u'Slet den gemte browser-tilstand (login-cookies m.m.) og '
+             u'afslut. Næste kørsel logger ind forfra. Alt andet bevares')
     group.add_argument(
         '--purge', '--forget-everything',
         dest='purge', default=False, action='store_true',
