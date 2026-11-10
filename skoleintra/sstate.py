@@ -121,7 +121,15 @@ def lastChanges():
 
 
 def prune(today, keepDays=14):
-    '''Fjern ugeplaner hvis uge sluttede for mere end keepDays dage siden'''
+    '''Fjern det, der ikke længere skal gemmes:
+
+    * ugeplaner, hvis uge sluttede for mere end keepDays dage siden
+    * "seneste ændring" pr. barn (ændringsliste og AI-resumé), når den er
+      mere end keepDays dage gammel. Ellers ville den stå, til næste
+      ændring for samme barn overskriver den - dvs. på ubestemt tid for
+      et barn, der har forladt skolen
+
+    Returnerer True, hvis noget blev fjernet'''
     changed = False
     limit = today - datetime.timedelta(days=keepDays)
     for cname, plans in load()['weekplans'].items():
@@ -130,8 +138,18 @@ def prune(today, keepDays=14):
             if monday and monday + datetime.timedelta(days=6) < limit:
                 del plans[wid]
                 changed = True
+    changes = load()['last_change']
+    for cname in list(changes):
+        change = changes[cname]
+        when = change.get('when') if isinstance(change, dict) else None
+        # 'when' er lokal tid som ISO-tekst - kun datoen sammenlignes. En
+        # post uden gyldigt tidspunkt kan aldrig udløbe og fjernes derfor
+        if not isinstance(when, str) or when[:10] < limit.isoformat():
+            del changes[cname]
+            changed = True
     if changed:
         save()
+    return changed
 
 
 def activeItems(today):

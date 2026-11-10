@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import datetime
 import json
 
 import skoleintra.config
@@ -15,6 +16,7 @@ import skoleintra.pgPhotos
 import skoleintra.pgSignup
 import skoleintra.pgWeekplans
 import skoleintra.soverview
+import skoleintra.sstate
 
 
 def main(argv=None):
@@ -44,6 +46,10 @@ def main(argv=None):
 
     # save updated state
     skoleintra.snotifications.saveState(state)
+
+    # Ryd op i det gemte (udløbne ugeplaner og "seneste ændring") - også
+    # når der ikke er sat noget overblik op
+    skoleintra.sstate.prune(datetime.date.today())
 
     # Opdatér skoleoverblikket i Home Assistant (hvis sat op)
     skoleintra.soverview.update()
