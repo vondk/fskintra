@@ -442,9 +442,63 @@ def readConfigFile(args):
     return cfg
 
 
+def setPaths(args):
+    '''Sæt cachedir, msgdir og statedir ud fra ROOT og cacheprefix. Dette
+    er det eneste sted, katalognavnene bestemmes (se også --print-paths)'''
+    args.cacheprefix = (args.cacheprefix or u'').strip('-')
+    if args.cacheprefix:
+        args.cacheprefix += '-'
+    args.cachedir = os.path.join(ROOT, args.cacheprefix + 'cache')
+    args.msgdir = os.path.join(ROOT, args.cacheprefix + 'msg')
+    args.statedir = os.path.join(ROOT, args.cacheprefix + 'state')
+
+
+def browserStatePath(opts=None):
+    '''Filen med browser-tilstanden (cookies m.m.) for profilen - eller
+    tom streng, hvis hostname/brugernavn ikke er kendt'''
+    opts = opts or options
+    hostname = getattr(opts, 'hostname', u'')
+    username = getattr(opts, 'username', u'')
+    if not (hostname and username):
+        return u''
+    return os.path.join(opts.cachedir, '%s-%s.state' % (hostname, username))
+
+
+def maintenanceFlags(args):
+    '''Flag, der kun arbejder på de gemte data: (flag, er det angivet?)'''
+    return (('--print-paths', args.printpaths),)
+
+
+def readPathOptions(args, envMode):
+    '''Læs kun det, der bestemmer, hvor fskintra gemmer data - uden at
+    kræve kodeord, modtager eller SMTP-opsætning. Bruges af flagene i
+    maintenanceFlags(), så et driftslag kan rydde op for en bruger uden at
+    kende (eller længere have) brugerens login.
+
+    Uden profil (hverken miljøvariabler eller konfigurationsfil) bruges
+    standarden: intet cacheprefix. Intet oprettes på disken'''
+    if envMode:
+        values = readProfileEnv()
+    elif os.path.isfile(args.configfilename):
+        cfg = readConfigFile(args)
+        values = dict((key, cfg[key]) for (key, _c, _q) in CONFIG_OPTIONS)
+    else:
+        # Uden FSKINTRA_USERNAME kan præfikset stadig være sat i miljøet
+        values = {'cacheprefix': readProfileEnv()['cacheprefix']}
+    checks = dict((key, check) for (key, check, _q) in CONFIG_OPTIONS)
+    for key in ('hostname', 'username', 'cacheprefix'):
+        value = values.get(key) or u''
+        # En ugyldig værdi ville have stoppet en normal kørsel - så der
+        # findes ingen fil med det navn
+        setattr(args, key, value if checks[key].match(value) else u'')
+    overview = os.environ.get(envName('OVERVIEW_JSON'), u'').strip()
+    args.overviewjson = u'' if '\x00' in overview else overview
+    setPaths(args)
+
+
 def parseArgs(argv):
     '''Parse command line options. Fails if one or more errors are found'''
-    global parser
+    global parser, options
 
     parser = argparse.ArgumentParser(
         usage=u'''%(prog)s [options]
@@ -511,6 +565,18 @@ https://github.com/svalgaard/fskintra/
         help=u'Hent intet - genbyg kun skoleoverblikket ud fra tidligere '
              u'hentede ugeplaner og send det til Home Assistant og/eller '
              u'FSKINTRA_OVERVIEW_JSON')
+
+    group = parser.add_argument_group(
+        u'Gemte data',
+        u'Kræver hverken kodeord eller SMTP-opsætning - kun det, der '
+        u'bestemmer stierne (%s, cacheprefix og %s)' %
+        (envName('ROOT'), envName('OVERVIEW_JSON')))
+    group.add_argument(
+        '--print-paths',
+        dest='printpaths', default=False, action='store_true',
+        help=u'Skriv som JSON på stdout, hvor fskintra gemmer cache, '
+             u'markeringer af sendte mails, tilstand og overblik, og afslut '
+             u'- intet oprettes eller ændres')
 
     group = parser.add_argument_group('Diverse')
     group.add_argument(
@@ -602,6 +668,20 @@ om du har kaldt fskintra med argumenterne -p, -h og -t.
         configure(args.configfilename, args.profile)
         sys.exit(0)
 
+    args.maintenance = [flag for flag, on in maintenanceFlags(args) if on]
+    if args.maintenance:
+        other = [flag for flag, on in (
+            ('--check-login', args.checklogin),
+            ('--overview-only', args.overviewonly),
+            ('--catch-up', args.catchup)) if on]
+        if len(args.maintenance) > 1 or other:
+            parser.error(u'%s kan ikke kombineres med %s' % (
+                args.maintenance[0],
+                u', '.join(args.maintenance[1:] + other)))
+        readPathOptions(args, envMode)
+        options = args
+        return
+
     if envMode:
         # Hele profilen kommer fra miljøet - konfigurationsfilen læses ikke
         cfg = None
@@ -674,17 +754,11 @@ Eller kør fskintra med --config'''.strip() + '\n'
     readEnvOptions(args)
 
     # Setup cache and msg directories, and ensure that they exist
-    args.cacheprefix = args.cacheprefix.strip('-')
-    if args.cacheprefix:
-        args.cacheprefix += '-'
-    args.cachedir = os.path.join(ROOT, args.cacheprefix + 'cache')
-    args.msgdir = os.path.join(ROOT, args.cacheprefix + 'msg')
-    args.statedir = os.path.join(ROOT, args.cacheprefix + 'state')
+    setPaths(args)
     for dn in (args.cachedir, args.msgdir, args.statedir):
         if not os.path.isdir(dn):
             os.makedirs(dn)
 
-    global options
     options = args
 
 

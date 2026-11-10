@@ -16,11 +16,18 @@ import skoleintra.pgPhotos
 import skoleintra.pgSignup
 import skoleintra.pgWeekplans
 import skoleintra.soverview
+import skoleintra.sretention
 import skoleintra.sstate
 
 
 def main(argv=None):
     skoleintra.config.parseArgs(argv)
+
+    if skoleintra.config.options.printpaths:
+        # Hvor ligger de gemte data? (stabil kontrakt for driftslag)
+        print(json.dumps(skoleintra.sretention.paths(), ensure_ascii=False,
+                         sort_keys=True))
+        return
 
     if skoleintra.config.options.checklogin:
         # Log blot ind og vis hvilke børn der er adgang til. Fejler login,
