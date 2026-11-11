@@ -102,3 +102,98 @@ def test_for_store_billeder_erstattes_af_link(sent, monkeypatch):
     html = html_of(msg)
     assert u'for stor til mail' in html
     assert u"<a href='%s'>Halloween 02.jpg</a>" % url(3) in html
+
+
+#
+# Hvad er sendt før? (FSKINTRA_STORE_MESSAGES=full/marker)
+#
+
+@pytest.fixture
+def stored(options, monkeypatch):
+    '''Rigtig maybeSend/store - men uden SMTP. Returnerer listen af sendte
+    beskeder som lister af billed-URL'er'''
+    options.catchup = True
+    monkeypatch.setattr(surllib, 'skoleGetURL',
+                        lambda u, *a, **kw: JPEG)
+    sent = []
+    send = semail.Message.send
+
+    def record(self):
+        sent.append(self.mp['data'])
+        return send(self)
+    monkeypatch.setattr(semail.Message, 'send', record)
+    return sent
+
+
+@pytest.mark.parametrize('mode', ['full', 'marker'])
+def test_album_med_nye_billeder_sender_kun_de_nye(options, stored, mode):
+    '''Går et album fra 6 til 11 billeder, ændres antallet af mails (2 -> 3)
+    og dermed titel og md5 for dem alle. Uden listen over tidligere sendte
+    billeder ville hele albummet blive sendt igen'''
+    options.storemessages = mode
+    urls = [url(i) for i in range(1, 12)]
+    pgPhotos.sendPhotos(CHILD, u'Halloween', 'abc', urls[:6])
+    assert stored == [urls[:5], urls[5:6]]
+
+    del stored[:]
+    pgPhotos.sendPhotos(CHILD, u'Halloween', 'abc', urls[:6])
+    assert stored == []                     # intet nyt
+
+    pgPhotos.sendPhotos(CHILD, u'Halloween', 'abc', urls)
+    assert stored == [urls[6:11]]           # kun de fem nye
+
+
+@pytest.mark.parametrize('mode', ['full', 'marker'])
+def test_nye_billeder_foerst_i_albummet(options, stored, mode):
+    options.storemessages = mode
+    urls = [url(i) for i in range(1, 9)]
+    pgPhotos.sendPhotos(CHILD, u'Halloween', 'abc', urls[2:])
+    del stored[:]
+    pgPhotos.sendPhotos(CHILD, u'Halloween', 'abc', urls)
+    assert stored == [urls[:2]]
+
+
+def test_marker_gemmer_kun_hashvaerdier(options, stored):
+    '''Med marker må hverken billedadresser (med barnets navn), titel eller
+    indhold ligge på disken'''
+    import glob
+    import json
+    import os
+    options.storemessages = 'marker'
+    pgPhotos.sendPhotos(CHILD, u'Halloween', 'abc', [url(1), url(2)])
+    dn, = glob.glob(os.path.join(options.msgdir, '*'))
+    fn, = os.listdir(dn)
+    assert fn.endswith('.json')
+    with open(os.path.join(dn, fn), encoding='utf-8') as fd:
+        text = fd.read()
+    assert json.loads(text) == {'photo_keys': [pgPhotos.photoKey(url(1)),
+                                               pgPhotos.photoKey(url(2))]}
+    assert 'Alma' not in text and 'Halloween' not in text
+    assert 'skoleintra' not in text
+
+
+def test_markeringer_uden_liste_fra_foer(options, stored):
+    '''Markeringer fra før listen blev gemt: afgørelsen falder tilbage på
+    md5 som hidtil - uændrede album sendes ikke igen'''
+    import glob
+    import os
+    options.storemessages = 'marker'
+    urls = [url(i) for i in range(1, 7)]
+    pgPhotos.sendPhotos(CHILD, u'Halloween', 'abc', urls)
+    for fn in glob.glob(os.path.join(options.msgdir, '*', '*.json')):
+        os.unlink(fn)
+    del stored[:]
+    pgPhotos.sendPhotos(CHILD, u'Halloween', 'abc', urls)
+    assert stored == []
+
+
+def test_andre_beskeder_gemmer_intet_med_marker(options):
+    import os
+    options.catchup = True
+    options.storemessages = 'marker'
+    msg = semail.Message(CHILD, 'frp', u'<p>Husk gymnastiktøj</p>')
+    msg.setTitle(u'Husk gymnastiktøj')
+    msg.setData({'unread': True})
+    msg.store()
+    dn, = os.listdir(options.msgdir)
+    assert os.listdir(os.path.join(options.msgdir, dn)) == []
