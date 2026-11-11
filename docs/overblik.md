@@ -60,7 +60,8 @@ kørsel (også når intet er ændret), så den genopstår efter en genstart af H
 Assistant. Sensoren har disse attributter:
 
 * `markdown`: overblikket, et afsnit pr. barn
-* `seneste_aendring`: seneste ændring pr. barn
+* `seneste_aendring`: seneste ændring pr. barn (forsvinder 14 dage efter
+  ændringen)
 * `punkter`: liste over lektier, ture m.m. (til egne automationer)
 * `opdateret`, `kilde` (`ai` eller `regler`)
 
@@ -190,7 +191,8 @@ python fskintra.py --overview-only -v
 
 Tilstanden (seneste version af hver ugeplan, seneste ændring og det cachede
 overblik) gemmes i `~/.skoleintra/<præfix>-state/state.json`. Slettes filen,
-vises næste ændring blot som "Ny ugeplan".
+vises næste ændring blot som "Ny ugeplan". Ugeplaner slettes fra filen 14
+dage efter ugens udløb, og "seneste ændring" 14 dage efter ændringen.
 
 Unit-tests:
 

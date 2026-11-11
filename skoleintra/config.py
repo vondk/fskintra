@@ -158,6 +158,22 @@ ENV_OPTIONS = (
      u'/data/overblik.json - en relativ sti regnes fra FSKINTRA_ROOT '
      u'(tom = ingen fil)'))
 
+# Mindste værdi for --prune-markers. En markering slettes, når indholdet
+# ikke har været at se på ForældreIntra i så mange dage. Er det kun
+# midlertidigt væk (fejl hos ForældreIntra, en tråd der er gledet ud af
+# listen), og dukker det op igen efter grænsen, sendes det som nyt. 30 dage
+# er derfor det mindste, der accepteres - se README.md
+MIN_PRUNE_MARKERS_DAYS = 30
+
+# Opbevaring: hvor længe gemte data beholdes. Alt er slået fra som standard
+# (tom værdi) - intet slettes, medmindre det er bedt om. Kan angives som
+# flag eller miljøvariabel; flaget vinder. En værdi under minimum afvises.
+# Formatet er (nøgle, miljøvariabel uden præfix, flag, mindste antal dage)
+RETENTION_OPTIONS = (
+    (u'prunecachedays', u'PRUNE_CACHE_DAYS', u'--prune-cache', 1),
+    (u'prunemarkersdays', u'PRUNE_MARKERS_DAYS', u'--prune-markers',
+     MIN_PRUNE_MARKERS_DAYS))
+
 # Indstillinger der aldrig må skrives på skærmen
 SECRET_OPTIONS = ('smtppassword', 'anthropicapikey', 'hatoken',
                   'mqttpassword')
@@ -442,9 +458,83 @@ def readConfigFile(args):
     return cfg
 
 
+def readRetentionOptions(args):
+    '''Læs RETENTION_OPTIONS fra flag eller miljø: et helt antal dage
+    eller None (slået fra). En ugyldig værdi eller en værdi under minimum
+    afvises - så hellere stoppe end at slette for meget'''
+    for (key, env, flag, minimum) in RETENTION_OPTIONS:
+        value, source = getattr(args, key, None), flag
+        if value is None:
+            value, source = os.environ.get(envName(env), u''), envName(env)
+        value = value.strip()
+        if not value:
+            setattr(args, key, None)
+            continue
+        if not re.match(r'^[0-9]{1,6}$', value) or int(value) < minimum:
+            parser.error(u'%s: %r er ikke et helt antal dage på mindst %d'
+                         % (source, value, minimum))
+        setattr(args, key, int(value))
+
+
+def setPaths(args):
+    '''Sæt cachedir, msgdir og statedir ud fra ROOT og cacheprefix. Dette
+    er det eneste sted, katalognavnene bestemmes (se også --print-paths)'''
+    args.cacheprefix = (args.cacheprefix or u'').strip('-')
+    if args.cacheprefix:
+        args.cacheprefix += '-'
+    args.cachedir = os.path.join(ROOT, args.cacheprefix + 'cache')
+    args.msgdir = os.path.join(ROOT, args.cacheprefix + 'msg')
+    args.statedir = os.path.join(ROOT, args.cacheprefix + 'state')
+
+
+def browserStatePath(opts=None):
+    '''Filen med browser-tilstanden (cookies m.m.) for profilen - eller
+    tom streng, hvis hostname/brugernavn ikke er kendt'''
+    opts = opts or options
+    hostname = getattr(opts, 'hostname', u'')
+    username = getattr(opts, 'username', u'')
+    if not (hostname and username):
+        return u''
+    return os.path.join(opts.cachedir, '%s-%s.state' % (hostname, username))
+
+
+def maintenanceFlags(args):
+    '''Flag, der kun arbejder på de gemte data: (flag, er det angivet?)'''
+    return (('--print-paths', args.printpaths),
+            ('--forget-login', args.forgetlogin),
+            ('--purge', args.purge))
+
+
+def readPathOptions(args, envMode):
+    '''Læs kun det, der bestemmer, hvor fskintra gemmer data - uden at
+    kræve kodeord, modtager eller SMTP-opsætning. Bruges af flagene i
+    maintenanceFlags(), så et driftslag kan rydde op for en bruger uden at
+    kende (eller længere have) brugerens login.
+
+    Uden profil (hverken miljøvariabler eller konfigurationsfil) bruges
+    standarden: intet cacheprefix. Intet oprettes på disken'''
+    if envMode:
+        values = readProfileEnv()
+    elif os.path.isfile(args.configfilename):
+        cfg = readConfigFile(args)
+        values = dict((key, cfg[key]) for (key, _c, _q) in CONFIG_OPTIONS)
+    else:
+        # Uden FSKINTRA_USERNAME kan præfikset stadig være sat i miljøet
+        values = {'cacheprefix': readProfileEnv()['cacheprefix']}
+    checks = dict((key, check) for (key, check, _q) in CONFIG_OPTIONS)
+    for key in ('hostname', 'username', 'cacheprefix'):
+        value = values.get(key) or u''
+        # En ugyldig værdi ville have stoppet en normal kørsel - så der
+        # findes ingen fil med det navn
+        setattr(args, key, value if checks[key].match(value) else u'')
+    overview = os.environ.get(envName('OVERVIEW_JSON'), u'').strip()
+    args.overviewjson = u'' if '\x00' in overview else overview
+    setPaths(args)
+
+
 def parseArgs(argv):
     '''Parse command line options. Fails if one or more errors are found'''
-    global parser
+    global parser, options
 
     parser = argparse.ArgumentParser(
         usage=u'''%(prog)s [options]
@@ -511,6 +601,49 @@ https://github.com/svalgaard/fskintra/
         help=u'Hent intet - genbyg kun skoleoverblikket ud fra tidligere '
              u'hentede ugeplaner og send det til Home Assistant og/eller '
              u'FSKINTRA_OVERVIEW_JSON')
+
+    group = parser.add_argument_group(
+        u'Opbevaring',
+        u'Slået fra som standard. Oprydningen sker som en del af en normal '
+        u'kørsel (ikke ved --check-login og --overview-only)')
+    group.add_argument(
+        '--prune-cache', metavar='DAYS',
+        dest='prunecachedays', default=None,
+        help=u'Slet hentede sider og billeder i cachen, der er mere end '
+             u'DAYS dage gamle (mindst 1). Login-cookies bevares. Kan også '
+             u'sættes med %s' % envName('PRUNE_CACHE_DAYS'))
+    group.add_argument(
+        '--prune-markers', metavar='DAYS',
+        dest='prunemarkersdays', default=None,
+        help=u'Slet markeringer (og evt. kopier) af sendte mails, når '
+             u'indholdet ikke har været at se på ForældreIntra i DAYS dage '
+             u'(mindst %d - se README.md). Kan også sættes med %s' %
+             (MIN_PRUNE_MARKERS_DAYS, envName('PRUNE_MARKERS_DAYS')))
+
+    group = parser.add_argument_group(
+        u'Gemte data',
+        u'Kræver hverken kodeord eller SMTP-opsætning - kun det, der '
+        u'bestemmer stierne (%s, cacheprefix og %s)' %
+        (envName('ROOT'), envName('OVERVIEW_JSON')))
+    group.add_argument(
+        '--print-paths',
+        dest='printpaths', default=False, action='store_true',
+        help=u'Skriv som JSON på stdout, hvor fskintra gemmer cache, '
+             u'markeringer af sendte mails, tilstand og overblik, og afslut '
+             u'- intet oprettes eller ændres')
+    group.add_argument(
+        '--forget-login',
+        dest='forgetlogin', default=False, action='store_true',
+        help=u'Slet den gemte browser-tilstand (login-cookies m.m.) og '
+             u'afslut. Næste kørsel logger ind forfra. Alt andet bevares')
+    group.add_argument(
+        '--purge', '--forget-everything',
+        dest='purge', default=False, action='store_true',
+        help=u'Slet alt, fskintra har gemt for denne %s og profil - cache '
+             u'(inkl. login-cookies), markeringer/kopier af sendte mails, '
+             u'tilstand og overblik - og afslut. Konfigurationsfilen '
+             u'slettes ikke. Næste kørsel bør være med --catch-up, ellers '
+             u'sendes alt igen' % envName('ROOT'))
 
     group = parser.add_argument_group('Diverse')
     group.add_argument(
@@ -602,6 +735,20 @@ om du har kaldt fskintra med argumenterne -p, -h og -t.
         configure(args.configfilename, args.profile)
         sys.exit(0)
 
+    args.maintenance = [flag for flag, on in maintenanceFlags(args) if on]
+    if args.maintenance:
+        other = [flag for flag, on in (
+            ('--check-login', args.checklogin),
+            ('--overview-only', args.overviewonly),
+            ('--catch-up', args.catchup)) if on]
+        if len(args.maintenance) > 1 or other:
+            parser.error(u'%s kan ikke kombineres med %s' % (
+                args.maintenance[0],
+                u', '.join(args.maintenance[1:] + other)))
+        readPathOptions(args, envMode)
+        options = args
+        return
+
     if envMode:
         # Hele profilen kommer fra miljøet - konfigurationsfilen læses ikke
         cfg = None
@@ -672,19 +819,14 @@ Eller kør fskintra med --config'''.strip() + '\n'
 
     # The sender/SMTP setup comes from the environment, not from --config
     readEnvOptions(args)
+    readRetentionOptions(args)
 
     # Setup cache and msg directories, and ensure that they exist
-    args.cacheprefix = args.cacheprefix.strip('-')
-    if args.cacheprefix:
-        args.cacheprefix += '-'
-    args.cachedir = os.path.join(ROOT, args.cacheprefix + 'cache')
-    args.msgdir = os.path.join(ROOT, args.cacheprefix + 'msg')
-    args.statedir = os.path.join(ROOT, args.cacheprefix + 'state')
+    setPaths(args)
     for dn in (args.cachedir, args.msgdir, args.statedir):
         if not os.path.isdir(dn):
             os.makedirs(dn)
 
-    global options
     options = args
 
 

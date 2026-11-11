@@ -95,8 +95,7 @@ class Browser(mechanize.Browser):
                            u'fra %s pga --skipcache' % sfn)
 
     def _browser_state_filename(self):
-        fn = '%s-%s.state' % (config.options.hostname, config.options.username)
-        return os.path.join(config.options.cachedir, fn)
+        return config.browserStatePath()
 
     def saveState(self):
         sfn = self._browser_state_filename()

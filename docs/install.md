@@ -96,6 +96,14 @@ via miljøvariabler:
 | ```FSKINTRA_STORE_MESSAGES``` | ```full``` gemmer en kopi af hver sendt mail i ```msg```-kataloget, ```marker``` gemmer kun en markering af at den er sendt | ```full``` |
 | ```FSKINTRA_SUBJECT_PREFIX``` | Tekst foran emnet på alle mails, fx ```[Lokal]``` - praktisk hvis flere installationer sender til samme modtager | *tom* |
 
+| ```FSKINTRA_PRUNE_CACHE_DAYS``` | Slet hentede sider og billeder i cachen efter så mange dage (mindst 1). Samme som ```--prune-cache``` | *tom* (intet slettes) |
+| ```FSKINTRA_PRUNE_MARKERS_DAYS``` | Slet markeringer af sendte mails, når indholdet ikke har været at se i så mange dage (mindst 30). Samme som ```--prune-markers``` | *tom* (intet slettes) |
+
+Hvad fskintra gemmer på disken, hvor længe, og hvordan det slettes
+(```--prune-cache```, ```--prune-markers```, ```--forget-login```,
+```--purge```, ```--print-paths```), står i afsnittet *Opbevaring af data* i
+[README.md](https://github.com/vondk/fskintra/blob/master/README.md#opbevaring-af-data).
+
 ```FSKINTRA_SMTP_USER``` og ```FSKINTRA_SMTP_PASSWORD``` skal enten begge
 angives eller begge udelades.
 

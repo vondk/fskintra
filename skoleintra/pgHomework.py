@@ -24,7 +24,9 @@ def formatHomework(cname, bs):
     homework_checksums = set()
     # First determine if some of the homework were sent earlier
     previouslySent = set()
-    for dn in semail.hasSentMessage(tp=SECTION):
+    # seen=False: opslaget finder ALLE lektie-markeringer og siger intet
+    # om, hvad der stadig står på ForældreIntra
+    for dn in semail.hasSentMessage(tp=SECTION, seen=False):
         for fn in glob.glob(os.path.join(dn, '*.json')):
             try:
                 jsn = json.load(open(fn))

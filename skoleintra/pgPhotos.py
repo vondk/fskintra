@@ -30,22 +30,45 @@ def photoNames(title, photos):
     return names
 
 
+def photoKey(url):
+    '''Nøgle for et billede i listen over tidligere sendte. En hashværdi,
+    så selve adressen (der indeholder barnets navn) ikke skal gemmes, når
+    der kun gemmes markeringer'''
+    return hashlib.sha256(url.encode('utf-8')).hexdigest()
+
+
+def previouslySentPhotos(mid):
+    '''Nøgler (photoKey) for de billeder i albummet, der er sendt før.
+
+    Med FSKINTRA_STORE_MESSAGES=full står adresserne i den gemte kopi
+    ('data'). Med 'marker' gemmes ingen kopi - der ligger i stedet kun
+    nøglerne ('photo_keys') ved markeringen. Uden dem ville et album, der
+    får nye billeder, blive sendt forfra'''
+    keys = set()
+    for dn in semail.hasSentMessage(tp=SECTION, mid=mid):
+        for fn in glob.glob(os.path.join(dn, '*.json')):
+            try:
+                with open(fn, encoding='utf-8') as fd:
+                    jsn = json.load(fd)
+            except (ValueError, OSError):
+                continue  # Simply ignore files with wrong JSON
+            if not isinstance(jsn, dict):
+                continue
+            keys.update(photoKey(url) for url in jsn.get('data') or []
+                        if isinstance(url, str))
+            keys.update(key for key in jsn.get('photo_keys') or []
+                        if isinstance(key, str))
+    return keys
+
+
 def sendPhotos(cname, title, mid, photos):
     '''Send photos if they have not already been sent'''
 
     # First determine if any of the photos were sent earlier
-    previouslySent = set()
-    for dn in semail.hasSentMessage(tp=SECTION, mid=mid):
-        for fn in glob.glob(os.path.join(dn, '*.json')):
-            try:
-                jsn = json.load(open(fn))
-            except ValueError:
-                continue  # Simply ignore files with wrong JSON
-            data = jsn.get('data')
-            if data:
-                previouslySent.update(data)
+    previouslySent = previouslySentPhotos(mid)
 
-    pending = list(url for url in photos if url not in previouslySent)
+    pending = list(url for url in photos
+                   if photoKey(url) not in previouslySent)
 
     if not pending:
         return
@@ -80,6 +103,7 @@ def sendPhotos(cname, title, mid, photos):
             msg.setTitle(u'Billeder: %s' % title)
         msg.setMessageID(mid)
         msg.setData(pics)
+        msg.setMarkerData({'photo_keys': [photoKey(url) for url in pics]})
         msg.setImagesAsAttachments(names)
         msg.maybeSend()
 

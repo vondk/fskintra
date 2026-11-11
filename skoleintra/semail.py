@@ -181,6 +181,9 @@ class Message:
         # URL -> filnavn (uden endelse) for billeder, der skal vedhæftes som
         # filer i stedet for at blive indlejret. Se setImagesAsAttachments()
         self._imageNames = None
+        # Det eneste, der gemmes sammen med markeringen, når
+        # FSKINTRA_STORE_MESSAGES=marker. Se setMarkerData()
+        self._markerData = None
         self._email = None
 
     def __repr__(self):
@@ -272,6 +275,14 @@ class Message:
 
     def setData(self, data):
         self.mp['data'] = data
+
+    def setMarkerData(self, data):
+        '''Data, der skal kunne læses igen, også når der kun gemmes en
+        markering (FSKINTRA_STORE_MESSAGES=marker) - gemmes da som JSON i
+        markeringens katalog. Må ikke indeholde indhold fra ForældreIntra
+        (tekst, navne, adresser), kun fx hashværdier'''
+        assert isinstance(data, dict)
+        self._markerData = data
 
     def getData(self):
         return self.mp['data']
@@ -367,6 +378,10 @@ msg--625922d86ffef60cfef5efc7822a7cff--123456'''
             with open(os.path.join(tdn, mid + '.json'), 'w',
                       encoding='utf-8') as fd:
                 json.dump(self.mp, fd, sort_keys=True, indent=2, default=str)
+        elif self._markerData:
+            with open(os.path.join(tdn, mid + '.json'), 'w',
+                      encoding='utf-8') as fd:
+                json.dump(self._markerData, fd, sort_keys=True)
 
         os.rename(tdn, dn)
         return True
@@ -758,8 +773,13 @@ def smtpConnect():
     return server
 
 
-def hasSentMessage(date='', tp='', md5='', mid=''):
-    '''Check whether an e-mail has already been sent'''
+def hasSentMessage(date='', tp='', md5='', mid='', seen=True):
+    '''Check whether an e-mail has already been sent.
+
+    Med --prune-markers noteres det samtidig på de fundne markeringer
+    (katalogets mtime), at indholdet stadig findes på ForældreIntra - det
+    er det, oprydningen går efter (sretention.pruneMarkers). seen=False
+    slår det fra for et opslag, der ikke handler om bestemt indhold'''
     if not date:
         date = '?' * 10
     if not tp:
@@ -780,4 +800,11 @@ def hasSentMessage(date='', tp='', md5='', mid=''):
 
     assert('/' not in spath)
 
-    return list(fn for fn in glob.glob(path) if not fn.endswith('.tmp'))
+    found = list(fn for fn in glob.glob(path) if not fn.endswith('.tmp'))
+    if seen and getattr(config.options, 'prunemarkersdays', None):
+        for dn in found:
+            try:
+                os.utime(dn)
+            except OSError:
+                pass
+    return found
