@@ -83,6 +83,14 @@ def main(argv=None):
     # når der ikke er sat noget overblik op
     skoleintra.sstate.prune(datetime.date.today())
 
+    # Opbevaring (slået fra som standard): markeringer af sendte mails,
+    # hvis indhold ikke længere findes på ForældreIntra. Sker kun her,
+    # sidst i en gennemført kørsel, hvor alt indhold er set efter
+    if skoleintra.config.options.prunemarkersdays:
+        skoleintra.sretention.pruneMarkers(
+            skoleintra.config.options.prunemarkersdays,
+            skoleintra.config.options.sections)
+
     # Opdatér skoleoverblikket i Home Assistant (hvis sat op)
     skoleintra.soverview.update()
 

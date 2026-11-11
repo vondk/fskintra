@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import collections
+import glob
 import json
 import re
 
@@ -174,6 +175,12 @@ def parseMessages(cname, bs):
             continue
 
         if semail.hasSentMessage(tp=SECTION, mid=(tid, lmid)):
+            if tid and getattr(config.options, 'prunemarkersdays', None):
+                # Tråden står stadig på listen. Kommer der et nyt svar,
+                # hentes HELE tråden, så de ældre beskeders markeringer
+                # skal også regnes som set - ellers gensendes de
+                semail.hasSentMessage(tp=SECTION,
+                                      mid=(glob.escape(tid), '*'))
             continue
 
         # This last messages has not been seen - load the entire conversation

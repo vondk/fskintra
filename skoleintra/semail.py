@@ -758,8 +758,13 @@ def smtpConnect():
     return server
 
 
-def hasSentMessage(date='', tp='', md5='', mid=''):
-    '''Check whether an e-mail has already been sent'''
+def hasSentMessage(date='', tp='', md5='', mid='', seen=True):
+    '''Check whether an e-mail has already been sent.
+
+    Med --prune-markers noteres det samtidig på de fundne markeringer
+    (katalogets mtime), at indholdet stadig findes på ForældreIntra - det
+    er det, oprydningen går efter (sretention.pruneMarkers). seen=False
+    slår det fra for et opslag, der ikke handler om bestemt indhold'''
     if not date:
         date = '?' * 10
     if not tp:
@@ -780,4 +785,11 @@ def hasSentMessage(date='', tp='', md5='', mid=''):
 
     assert('/' not in spath)
 
-    return list(fn for fn in glob.glob(path) if not fn.endswith('.tmp'))
+    found = list(fn for fn in glob.glob(path) if not fn.endswith('.tmp'))
+    if seen and getattr(config.options, 'prunemarkersdays', None):
+        for dn in found:
+            try:
+                os.utime(dn)
+            except OSError:
+                pass
+    return found

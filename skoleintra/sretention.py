@@ -8,6 +8,7 @@ med flagene her i stedet for selv at slette filer.
 
 import glob
 import os
+import re
 import shutil
 import time
 
@@ -89,6 +90,80 @@ def pruneCache(days, now=None):
             except OSError:
                 pass
     config.log(u'Cache: %d filer ældre end %d dage slettet' % (count, days),
+               2)
+    return count
+
+
+# Markering af en sendt mail: dato--type--md5(--id), se semail.Message
+MARKER_RE = re.compile(r'^\d{4}-\d{2}-\d{2}--([a-z]{3})--[0-9a-f]{32}(--.*)?$')
+# Hvornår "sidst set" blev noteret uafbrudt fra (indhold) og senest (mtime)
+SEEN_STAMP = '.last-seen'
+
+
+def _seenSince(msgdir, days, now):
+    '''Hvor længe har "sidst set" været noteret uden ophold?
+
+    En markering må kun slettes, hvis dens mtime faktisk er udtryk for,
+    hvornår indholdet sidst var at se. Det er den først, når en kørsel med
+    --prune-markers har haft lejlighed til at notere det - så første gang
+    flaget bruges (eller efter en pause længere end days) startes uret
+    forfra, og intet slettes, før der er gået days dage'''
+    stamp = os.path.join(msgdir, SEEN_STAMP)
+    since = None
+    try:
+        if now - os.lstat(stamp).st_mtime <= days * 86400:
+            with open(stamp) as fd:
+                since = float(fd.read().strip())
+    except (OSError, ValueError):
+        pass
+    if since is None or since > now:
+        since = now
+    with open(stamp, 'w') as fd:
+        fd.write('%r\n' % since)
+    os.utime(stamp, (now, now))
+    return since
+
+
+def pruneMarkers(days, types, now=None):
+    '''Slet markeringer (og med STORE_MESSAGES=full kopierne) af sendte
+    mails, hvis indhold ikke har været at se på ForældreIntra i days dage.
+    Kun typer (afsnit) i types - et afsnit, der er fravalgt med --section,
+    er ikke blevet set efter og må ikke ryddes. Returnerer antal slettede.
+
+    Der ryddes efter "sidst set" (katalogets mtime, som
+    semail.hasSentMessage fornyer), ikke efter datoen i navnet:
+    ForældreIntra viser opslag, dokumenter, billedalbum og tråde, lige så
+    længe skolen lader dem stå - uden nogen tidsgrænse - så en markering,
+    der blot er gammel, kan sagtens høre til noget, der stadig vises, og
+    som så ville blive sendt igen.
+
+    Skal kaldes sidst i en kørsel, hvor alle afsnit er gennemført'''
+    msgdir = config.options.msgdir
+    now = time.time() if now is None else now
+    try:
+        since = _seenSince(msgdir, days, now)
+        names = os.listdir(msgdir)
+    except OSError as e:
+        config.log(u'Markeringer: kunne ikke rydde op i %s: %s' % (msgdir, e),
+                   1)
+        return 0
+    limit = now - days * 86400
+    if since > limit:
+        config.log(u'Markeringer: rydder først op, når "sidst set" er '
+                   u'noteret i %d dage' % days, 2)
+        return 0
+    count = 0
+    for name in names:
+        m = MARKER_RE.match(name)
+        if not m or name.endswith('.tmp') or m.group(1) not in types:
+            continue
+        path = os.path.join(msgdir, name)
+        try:
+            if os.lstat(path).st_mtime < limit and _remove(path):
+                count += 1
+        except OSError as e:
+            config.log(u'Kunne ikke slette markeringen %s: %s' % (path, e), 2)
+    config.log(u'Markeringer: %d ikke set i %d dage slettet' % (count, days),
                2)
     return count
 

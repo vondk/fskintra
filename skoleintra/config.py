@@ -158,12 +158,21 @@ ENV_OPTIONS = (
      u'/data/overblik.json - en relativ sti regnes fra FSKINTRA_ROOT '
      u'(tom = ingen fil)'))
 
+# Mindste værdi for --prune-markers. En markering slettes, når indholdet
+# ikke har været at se på ForældreIntra i så mange dage. Er det kun
+# midlertidigt væk (fejl hos ForældreIntra, en tråd der er gledet ud af
+# listen), og dukker det op igen efter grænsen, sendes det som nyt. 30 dage
+# er derfor det mindste, der accepteres - se README.md
+MIN_PRUNE_MARKERS_DAYS = 30
+
 # Opbevaring: hvor længe gemte data beholdes. Alt er slået fra som standard
 # (tom værdi) - intet slettes, medmindre det er bedt om. Kan angives som
 # flag eller miljøvariabel; flaget vinder. En værdi under minimum afvises.
 # Formatet er (nøgle, miljøvariabel uden præfix, flag, mindste antal dage)
 RETENTION_OPTIONS = (
-    (u'prunecachedays', u'PRUNE_CACHE_DAYS', u'--prune-cache', 1),)
+    (u'prunecachedays', u'PRUNE_CACHE_DAYS', u'--prune-cache', 1),
+    (u'prunemarkersdays', u'PRUNE_MARKERS_DAYS', u'--prune-markers',
+     MIN_PRUNE_MARKERS_DAYS))
 
 # Indstillinger der aldrig må skrives på skærmen
 SECRET_OPTIONS = ('smtppassword', 'anthropicapikey', 'hatoken',
@@ -603,6 +612,13 @@ https://github.com/svalgaard/fskintra/
         help=u'Slet hentede sider og billeder i cachen, der er mere end '
              u'DAYS dage gamle (mindst 1). Login-cookies bevares. Kan også '
              u'sættes med %s' % envName('PRUNE_CACHE_DAYS'))
+    group.add_argument(
+        '--prune-markers', metavar='DAYS',
+        dest='prunemarkersdays', default=None,
+        help=u'Slet markeringer (og evt. kopier) af sendte mails, når '
+             u'indholdet ikke har været at se på ForældreIntra i DAYS dage '
+             u'(mindst %d - se README.md). Kan også sættes med %s' %
+             (MIN_PRUNE_MARKERS_DAYS, envName('PRUNE_MARKERS_DAYS')))
 
     group = parser.add_argument_group(
         u'Gemte data',
