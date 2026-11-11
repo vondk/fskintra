@@ -9,6 +9,7 @@ med flagene her i stedet for selv at slette filer.
 import glob
 import os
 import shutil
+import time
 
 from . import config
 from . import soverview
@@ -52,6 +53,44 @@ def _remove(path):
     else:
         os.unlink(path)
     return True
+
+
+def pruneCache(days, now=None):
+    '''Slet cachede sider, billeder og dokumenter fra ForældreIntra, der
+    sidst blev hentet for mere end days dage siden (mtime), og de kataloger,
+    der derved bliver tomme. Returnerer antal slettede filer.
+
+    Kun fskintras egne cache-filer slettes: navnet er '<sti>.cache' plus
+    evt. et suffiks for URL'ens query (se surllib.url2cacheFileName), så
+    mønstret er '*.cache*' og ikke blot '*.cache'. Browser-tilstanden
+    (<host>-<bruger>.state) røres aldrig - ellers skulle der logges ind
+    forfra efter hver oprydning.
+
+    At slette fra cachen giver aldrig gensendte mails: om en besked er
+    sendt, afgøres af markeringerne i msgdir, ikke af cachen'''
+    cachedir = config.options.cachedir
+    limit = (time.time() if now is None else now) - days * 86400
+    count = 0
+    for dirpath, _dirnames, filenames in os.walk(cachedir, topdown=False):
+        for fn in filenames:
+            if '.cache' not in fn or fn.endswith('.state'):
+                continue
+            path = os.path.join(dirpath, fn)
+            try:
+                if os.lstat(path).st_mtime < limit:
+                    os.unlink(path)
+                    count += 1
+            except OSError as e:
+                config.log(u'Kunne ikke slette %s fra cachen: %s' % (path, e),
+                           2)
+        if dirpath != cachedir:
+            try:
+                os.rmdir(dirpath)  # lykkes kun, hvis kataloget er tomt
+            except OSError:
+                pass
+    config.log(u'Cache: %d filer ældre end %d dage slettet' % (count, days),
+               2)
+    return count
 
 
 def browserStateFiles():

@@ -158,6 +158,13 @@ ENV_OPTIONS = (
      u'/data/overblik.json - en relativ sti regnes fra FSKINTRA_ROOT '
      u'(tom = ingen fil)'))
 
+# Opbevaring: hvor længe gemte data beholdes. Alt er slået fra som standard
+# (tom værdi) - intet slettes, medmindre det er bedt om. Kan angives som
+# flag eller miljøvariabel; flaget vinder. En værdi under minimum afvises.
+# Formatet er (nøgle, miljøvariabel uden præfix, flag, mindste antal dage)
+RETENTION_OPTIONS = (
+    (u'prunecachedays', u'PRUNE_CACHE_DAYS', u'--prune-cache', 1),)
+
 # Indstillinger der aldrig må skrives på skærmen
 SECRET_OPTIONS = ('smtppassword', 'anthropicapikey', 'hatoken',
                   'mqttpassword')
@@ -442,6 +449,24 @@ def readConfigFile(args):
     return cfg
 
 
+def readRetentionOptions(args):
+    '''Læs RETENTION_OPTIONS fra flag eller miljø: et helt antal dage
+    eller None (slået fra). En ugyldig værdi eller en værdi under minimum
+    afvises - så hellere stoppe end at slette for meget'''
+    for (key, env, flag, minimum) in RETENTION_OPTIONS:
+        value, source = getattr(args, key, None), flag
+        if value is None:
+            value, source = os.environ.get(envName(env), u''), envName(env)
+        value = value.strip()
+        if not value:
+            setattr(args, key, None)
+            continue
+        if not re.match(r'^[0-9]{1,6}$', value) or int(value) < minimum:
+            parser.error(u'%s: %r er ikke et helt antal dage på mindst %d'
+                         % (source, value, minimum))
+        setattr(args, key, int(value))
+
+
 def setPaths(args):
     '''Sæt cachedir, msgdir og statedir ud fra ROOT og cacheprefix. Dette
     er det eneste sted, katalognavnene bestemmes (se også --print-paths)'''
@@ -567,6 +592,17 @@ https://github.com/svalgaard/fskintra/
         help=u'Hent intet - genbyg kun skoleoverblikket ud fra tidligere '
              u'hentede ugeplaner og send det til Home Assistant og/eller '
              u'FSKINTRA_OVERVIEW_JSON')
+
+    group = parser.add_argument_group(
+        u'Opbevaring',
+        u'Slået fra som standard. Oprydningen sker som en del af en normal '
+        u'kørsel (ikke ved --check-login og --overview-only)')
+    group.add_argument(
+        '--prune-cache', metavar='DAYS',
+        dest='prunecachedays', default=None,
+        help=u'Slet hentede sider og billeder i cachen, der er mere end '
+             u'DAYS dage gamle (mindst 1). Login-cookies bevares. Kan også '
+             u'sættes med %s' % envName('PRUNE_CACHE_DAYS'))
 
     group = parser.add_argument_group(
         u'Gemte data',
@@ -767,6 +803,7 @@ Eller kør fskintra med --config'''.strip() + '\n'
 
     # The sender/SMTP setup comes from the environment, not from --config
     readEnvOptions(args)
+    readRetentionOptions(args)
 
     # Setup cache and msg directories, and ensure that they exist
     setPaths(args)

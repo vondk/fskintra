@@ -60,6 +60,12 @@ def main(argv=None):
         skoleintra.soverview.update()
         return
 
+    # Opbevaring (slået fra som standard): cachen ryddes før der hentes
+    # nyt, så det også sker i en kørsel, der senere fejler (fx login)
+    if skoleintra.config.options.prunecachedays:
+        skoleintra.sretention.pruneCache(
+            skoleintra.config.options.prunecachedays)
+
     (full, state) = skoleintra.snotifications.checkForUpdates()
     if not full:
         return
