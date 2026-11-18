@@ -96,17 +96,26 @@ def _build(today):
 
     entries = ssummary.overviewEntries(items, ai)
     headline = ssummary.ruleHeadline(entries)
+    attributes = sensorAttributes(entries, sstate.lastChanges(),
+                                  cache.get('generated') or u'', bool(ai),
+                                  today)
+    return headline, attributes, entries
+
+
+def sensorAttributes(entries, changes, generated, isAi, today):
+    '''Sensorens attributter. Bruges også, når overblikket er hentet fra en
+    anden fskintra (se sremote.py), så sensoren ser ens ud.
+
+    changes: liste af (barn, ændring) som sstate.lastChanges()'''
     markdown = ssummary.renderOverview(entries, today)
-    generated = cache.get('generated') or u''
     markdown += u'\n\n_Opdateret %s%s_' % (
         ssummary.fmtTimestamp(generated),
-        u' · AI-resumé' if ai else u'')
-
-    attributes = {
+        u' · AI-resumé' if isAi else u'')
+    return {
         'friendly_name': u'Skoleoverblik',
         'icon': 'mdi:school',
         'markdown': markdown,
-        'seneste_aendring': ssummary.renderLastChanges(sstate.lastChanges()),
+        'seneste_aendring': ssummary.renderLastChanges(changes),
         'punkter': [{
             'barn': e['child'],
             'dato': e.get('date'),
@@ -115,9 +124,8 @@ def _build(today):
             'tekst': e['short'],
         } for e in entries if e['category'] != 'info'],
         'opdateret': generated,
-        'kilde': u'ai' if ai else u'regler',
+        'kilde': u'ai' if isAi else u'regler',
     }
-    return headline, attributes, entries
 
 
 def _publish(state, attributes):
