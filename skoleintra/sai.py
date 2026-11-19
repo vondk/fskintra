@@ -36,7 +36,9 @@ Regler:
 - Brug KUN information der står i punkterne. Gæt ikke, og tilføj ikke råd,
   påmindelser eller detaljer der ikke står der.
 - Skriv kort og konkret på dansk. Ingen indledning eller høflighedsfraser.
-- Henvis til punkter med deres id.
+- Id'et bruges KUN i feltet "id" i listen "punkter". Skriv aldrig id'er,
+  numre som [0] eller "punkt 0" i teksterne ("resume" og "tekst") - de
+  læses af forælderen, som ikke ser id'erne.
 - Lektier står normalt under den dag, de skal være lavet til.
 
 Kategorier (vælg den der kræver mest handling fra forælder/barn):
@@ -81,7 +83,7 @@ def _schema(textField, textDesc, withItemText):
         item['properties']['tekst'] = {
             'type': 'string',
             'description': u'Kort omskrivning af punktet (højst ca. 100 '
-                           u'tegn) uden dag og fag - kun hvad der står'}
+                           u'tegn) uden dag, fag og id - kun hvad der står'}
         item['required'].append('tekst')
     schema = {
         'type': 'object',
@@ -171,7 +173,7 @@ def _normalize(data, textField, nItems):
         return None
     res = {'kategorier': {}, 'tekster': {}}
     if textField:
-        res[textField] = str(data.get(textField) or u'').strip()
+        res[textField] = ssummary.stripIds(str(data.get(textField) or u''))
     for p in data.get('punkter') or []:
         try:
             pid = int(p['id'])
@@ -181,7 +183,7 @@ def _normalize(data, textField, nItems):
             continue
         if p.get('kategori') in CATEGORIES:
             res['kategorier'][str(pid)] = p['kategori']
-        tekst = str(p.get('tekst') or u'').strip()
+        tekst = ssummary.stripIds(str(p.get('tekst') or u''))
         if tekst:
             res['tekster'][str(pid)] = tekst
     return res
@@ -236,10 +238,12 @@ def summarizeChange(cname, title, diff, items):
               u'Opgave: Skriv i "resume" 1-2 korte sætninger om hvad der er '
               u'nyt, og om det kræver handling (fx en lektie eller noget der '
               u'skal medbringes). Står der intet der kræver handling, så sig '
-              u'det. Giv derefter hvert punkt med id en kategori.']
+              u'det. Nævn ikke id\'er i resuméet. Giv derefter hvert '
+              u'punkt med id en kategori.']
 
     data = _call(u'\n'.join(lines),
-                 _schema('resume', u'1-2 korte sætninger på dansk', False))
+                 _schema('resume', u'1-2 korte sætninger på dansk uden '
+                         u'id\'er', False))
     return _normalize(data, 'resume', len(entries))
 
 
