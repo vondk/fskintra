@@ -17,6 +17,7 @@ import skoleintra.pgPhotos
 import skoleintra.pgSignup
 import skoleintra.pgWeekplans
 import skoleintra.soverview
+import skoleintra.sremote
 import skoleintra.sretention
 import skoleintra.sstate
 
@@ -58,6 +59,14 @@ def main(argv=None):
     if skoleintra.config.options.overviewonly:
         # Genbyg kun skoleoverblikket ud fra tidligere hentede ugeplaner
         skoleintra.soverview.update()
+        return
+
+    if skoleintra.config.options.overviewfromurl:
+        # Overblikket fra en anden fskintra (fx fskintra-hosted) til Home
+        # Assistant - intet hentes fra ForældreIntra, ingen mails, ingen AI
+        if not skoleintra.sremote.update(
+                skoleintra.config.options.overviewurl):
+            sys.exit(skoleintra.config.EXIT_ERROR)
         return
 
     # Opbevaring (slået fra som standard): cachen ryddes før der hentes

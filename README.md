@@ -56,6 +56,9 @@ fskintra ikke længere, bliver alt liggende, som det er.
   forespørgsler, afgøres af vilkårene for din API-konto.
 * **Home Assistant / MQTT** - kun når det er sat op: overblikket (samme
   indhold som overview-JSON).
+* **`--overview-from-url`** sender intet ud af huset ud over Home Assistant
+  / MQTT. Overblikket hentes fra adressen i `FSKINTRA_OVERVIEW_URL` (fx
+  fskintra-hosted), og hverken ForældreIntra eller Anthropic kontaktes.
 
 ### Oprydning
 

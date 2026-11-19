@@ -5,9 +5,11 @@ import base64
 import configparser
 import getpass
 import inspect
+import ipaddress
 import os
 import re
 import sys
+import urllib.parse
 
 # Default location of configuration files. FSKINTRA_ROOT kan pege på et
 # andet katalog, fx et katalog pr. bruger når fskintra køres af en tjeneste
@@ -177,6 +179,17 @@ RETENTION_OPTIONS = (
 # Indstillinger der aldrig må skrives på skærmen
 SECRET_OPTIONS = ('smtppassword', 'anthropicapikey', 'hatoken',
                   'mqttpassword')
+
+# --overview-from-url: adressen på et skoleoverblik fra en anden fskintra
+# (fx fskintra-hosted). Den indeholder et token og angives derfor i miljøet
+# og ikke på kommandolinjen, og den skrives aldrig på skærmen
+OVERVIEW_URL_ENV = u'OVERVIEW_URL'
+
+# Det eneste fra ENV_OPTIONS, --overview-from-url bruger: Home Assistant og
+# MQTT. Afsender og SMTP kræves ikke, for der sendes ingen mails
+REMOTE_ENV_KEYS = ('haurl', 'hatoken', 'haentity', 'hatodo', 'hacalendar',
+                   'haverifyssl', 'mqtthost', 'mqttport', 'mqttuser',
+                   'mqttpassword')
 
 # Valgfrie funktioner: en ugyldig værdi giver kun en advarsel og slår
 # funktionen fra - den må aldrig stoppe afsendelsen af mails
@@ -360,13 +373,16 @@ def configure(configfilename, profile):
     sys.exit(0)
 
 
-def readEnvOptions(args):
+def readEnvOptions(args, keys=None):
     '''Read the sender/SMTP setup from the environment and copy it to args.
+    keys: read only these settings (default: all of ENV_OPTIONS)
 
     Fails if one or more settings are missing/invalid'''
 
+    envOptions = [opt for opt in ENV_OPTIONS
+                  if keys is None or opt[0] in keys]
     values, sources = {}, {}
-    for (key, env, check, default, question) in ENV_OPTIONS:
+    for (key, env, check, default, question) in envOptions:
         value = os.environ.get(envName(env), u'')
         source = u'miljøvariablen %s' % envName(env)
         if not value.strip():
@@ -376,15 +392,16 @@ def readEnvOptions(args):
         values[key] = value if key.endswith('password') else value.strip()
         sources[key] = source
 
-    for (key, env, check, default, question) in ENV_OPTIONS:
+    for (key, env, check, default, question) in envOptions:
         value = values[key]
         extraErr = u''
         if check.match(value):
-            if key == 'smtpusername' and value and not values['smtppassword']:
+            if key == 'smtpusername' and value and \
+                    not values.get('smtppassword'):
                 extraErr = (u'\n%s må ikke angives uden at %s også er angivet.'
                             % (envName('SMTP_USER'), envName('SMTP_PASSWORD')))
             elif (key == 'smtppassword' and value and
-                  not values['smtpusername']):
+                  not values.get('smtpusername')):
                 extraErr = (u'\n%s kræves da %s er angivet.'
                             % (envName('SMTP_USER'), envName('SMTP_PASSWORD')))
             else:
@@ -416,7 +433,7 @@ export %s=NY_VÆRDI'''.strip() + '\n'
         sys.stderr.write(msg)
         sys.exit(1)
 
-    if bool(values['haurl']) != bool(values['hatoken']):
+    if bool(values.get('haurl')) != bool(values.get('hatoken')):
         log(u'ADVARSEL: %s og %s skal angives sammen - skoleoverblik i '
             u'Home Assistant er slået fra' %
             (envName('HA_URL'), envName('HA_TOKEN')), 0)
@@ -424,7 +441,60 @@ export %s=NY_VÆRDI'''.strip() + '\n'
 
     for key in values:
         setattr(args, key, values[key])
-    args.smtpport = int(args.smtpport, 10)
+    if 'smtpport' in values:
+        args.smtpport = int(args.smtpport, 10)
+
+
+def isValidOverviewUrl(url):
+    '''Adressen til --overview-from-url: kun https, for tokenet i adressen
+    må ikke sendes ukrypteret. http er kun tilladt til localhost og
+    loopback-adresser (fx en test). Ingen login i adressen'''
+    if not url or any(c.isspace() for c in url):
+        return False
+    try:
+        parts = urllib.parse.urlsplit(url)
+        host = parts.hostname
+        parts.port  # Kaster ValueError ved en ugyldig port
+    except ValueError:
+        return False
+    if not host or parts.username is not None:
+        return False
+    if parts.scheme == 'https':
+        return True
+    if parts.scheme != 'http':
+        return False
+    if host == 'localhost':
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def readRemoteOptions(args, envMode):
+    '''--overview-from-url: læs kun stierne (state.json med det, der er
+    synkroniseret til Home Assistant), Home Assistant/MQTT og adressen.
+    Kræver hverken kodeord til ForældreIntra, modtager eller SMTP'''
+    readPathOptions(args, envMode)
+    readEnvOptions(args, REMOTE_ENV_KEYS)
+    env = envName(OVERVIEW_URL_ENV)
+    url = os.environ.get(env, u'').strip()
+    if not url:
+        parser.error(u'--overview-from-url kræver, at %s er sat til '
+                     u'adressen på overblikket' % env)
+    if not isValidOverviewUrl(url):
+        # Adressen indeholder et token - den skrives ikke på skærmen
+        parser.error(u'%s skal være en https-adresse uden login' % env)
+    if not ((args.haurl and args.hatoken) or args.mqtthost):
+        parser.error(u'--overview-from-url kræver Home Assistant (%s og %s) '
+                     u'eller MQTT (%s)' % (envName('HA_URL'),
+                                           envName('HA_TOKEN'),
+                                           envName('MQTT_HOST')))
+    args.overviewurl = url
+    # AI kaldes ikke i denne tilstand
+    args.anthropicapikey = u''
+    if not os.path.isdir(args.statedir):
+        os.makedirs(args.statedir)
 
 
 def readConfigFile(args):
@@ -601,6 +671,14 @@ https://github.com/svalgaard/fskintra/
         help=u'Hent intet - genbyg kun skoleoverblikket ud fra tidligere '
              u'hentede ugeplaner og send det til Home Assistant og/eller '
              u'FSKINTRA_OVERVIEW_JSON')
+    group.add_argument(
+        '--overview-from-url',
+        dest='overviewfromurl', default=False,
+        action='store_true',
+        help=u'Hent intet fra ForældreIntra - hent i stedet '
+             u'skoleoverblikket fra en anden fskintra (fx fskintra-hosted) '
+             u'via adressen i %s, og send det til Home Assistant. Sender '
+             u'ingen mails og kalder ikke AI' % envName(OVERVIEW_URL_ENV))
 
     group = parser.add_argument_group(
         u'Opbevaring',
@@ -740,12 +818,25 @@ om du har kaldt fskintra med argumenterne -p, -h og -t.
         other = [flag for flag, on in (
             ('--check-login', args.checklogin),
             ('--overview-only', args.overviewonly),
+            ('--overview-from-url', args.overviewfromurl),
             ('--catch-up', args.catchup)) if on]
         if len(args.maintenance) > 1 or other:
             parser.error(u'%s kan ikke kombineres med %s' % (
                 args.maintenance[0],
                 u', '.join(args.maintenance[1:] + other)))
         readPathOptions(args, envMode)
+        options = args
+        return
+
+    if args.overviewfromurl:
+        other = [flag for flag, on in (
+            ('--check-login', args.checklogin),
+            ('--overview-only', args.overviewonly),
+            ('--catch-up', args.catchup)) if on]
+        if other:
+            parser.error(u'--overview-from-url kan ikke kombineres med %s'
+                         % u', '.join(other))
+        readRemoteOptions(args, envMode)
         options = args
         return
 

@@ -42,10 +42,17 @@ def isEnabled():
 def keyed(entries):
     '''Liste af (nøgle, punkt). Nøglen (barn|dato|fag|n) er stabil når
     teksten ændres, så punktet opdateres i stedet for at blive oprettet
-    igen. n tæller op hvis samme fag optræder flere gange samme dag'''
+    igen. n tæller op hvis samme fag optræder flere gange samme dag.
+
+    Har punktet allerede en nøgle ('key' - et overblik hentet fra en anden
+    fskintra, se sremote.py), bruges den - den anden fskintra har lavet
+    den med denne funktion'''
     seen = {}
     res = []
     for e in entries:
+        if e.get('key'):
+            res.append((e['key'], e))
+            continue
         base = (e['child'], e.get('date') or u'', e['subject'])
         n = seen.get(base, 0)
         seen[base] = n + 1

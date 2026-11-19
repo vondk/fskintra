@@ -33,6 +33,7 @@ Alt styres med miljøvariabler (se også `fskintra.env.example`):
 | `FSKINTRA_MQTT_PORT` | `1883` | Brokerens port |
 | `FSKINTRA_MQTT_USER` / `_PASSWORD` | (tom) | Kun hvis brokeren kræver login |
 | `FSKINTRA_OVERVIEW_JSON` | (tom) | Skriv overblikket som JSON til denne fil. Relativ sti regnes fra `FSKINTRA_ROOT`. Kræver ikke Home Assistant |
+| `FSKINTRA_OVERVIEW_URL` | (tom) | Kun med `--overview-from-url`: adressen på et overblik fra en anden fskintra, fx fskintra-hosted. Se nedenfor |
 
 ### API-nøgle til Claude
 
@@ -174,6 +175,38 @@ indholdet fra sidste gode kørsel.
 * `kort` er AI-forkortet, hvis AI er slået til, ellers hele teksten på én
   linje. `kilde` er `ai` eller `regler`.
 * `version` tælles op ved ændringer, der ikke er bagudkompatible.
+
+### Overblikket fra fskintra-hosted (`--overview-from-url`)
+
+Bruger du [fskintra-hosted](https://github.com/vondk/fskintra-hosted) til
+mails, kan din egen fskintra nøjes med at sende overblikket videre til
+Home Assistant. Så kaldes AI kun ét sted, og du får ikke mails to gange:
+
+```bash
+FSKINTRA_OVERVIEW_URL=https://<din-hosted>/overblik/<token>.json \
+    python fskintra.py --overview-from-url
+```
+
+Med Docker sættes `FSKINTRA_OVERVIEW_URL` i env-filen, og
+`--overview-from-url` står efter image-navnet. Linket laver du under
+*Status → Home Assistant* i fskintra-hosted.
+
+* Der hentes intet fra ForældreIntra, der sendes ingen mails, og AI kaldes
+  ikke. Afsender, SMTP og kodeord til ForældreIntra kræves ikke.
+* Sensoren (REST eller MQTT), to-do-listen og kalenderen opdateres som
+  ved egen hentning, med de samme punkter og AI-tekster som hos
+  fskintra-hosted. `FSKINTRA_OVERVIEW_JSON` bruges ikke.
+* Punkternes id er de samme nøgler, som synkroniseringen bruger. Går du
+  over fra egen hentning, genkendes de punkter, der allerede er oprettet:
+  afkrydsning bevares, og slettede punkter kommer ikke igen. Det kræver,
+  at `state.json` er den samme, altså samme `FSKINTRA_ROOT` og
+  `cacheprefix`.
+* Linket virker som et kodeord. Det skal være https, omdirigeringer
+  følges ikke, og det skrives aldrig i loggen.
+* Kan overblikket ikke hentes (fx et nyt link eller ingen forbindelse),
+  ændres intet i Home Assistant, og fskintra afslutter med exit-kode 1.
+
+Kør den lige så tit som fskintra-hosted henter, fx hver time.
 
 ## Mailtråde
 
