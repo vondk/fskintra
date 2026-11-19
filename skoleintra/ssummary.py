@@ -117,6 +117,24 @@ def ruleCategory(item):
     return 'info'
 
 
+# Id'er fra AI-prompten, som modellen er kommet til at skrive i en tekst:
+# "[0]" hvor som helst, og "Nyt punkt 0:" / "Punkt [2] -" først i teksten
+_BRACKET_ID = re.compile(r'\s*\[\d{1,3}\]')
+_LEADING_ID = re.compile(r'^(?:(?:nyt|ændret|fjernet|tilføjet)\s+)?punkt\s+'
+                         r'\[?\d{1,3}\]?\s*[:.\-–]\s*', re.I)
+
+
+def stripIds(text):
+    '''Fjern punkt-id'er fra en AI-tekst. Tal i selve teksten (fx "side
+    44" eller "kl. 8.30") røres ikke. Bevarer stort begyndelsesbogstav'''
+    text = (text or u'').strip()
+    cleaned = _LEADING_ID.sub(u'', text)
+    cleaned = _BRACKET_ID.sub(u'', cleaned).strip()
+    if cleaned != text and cleaned[:1].islower():
+        cleaned = cleaned[0].upper() + cleaned[1:]
+    return cleaned
+
+
 def oneLine(text, maxlen=None):
     s = u' · '.join(line for line in text.split(u'\n') if line)
     if maxlen and len(s) > maxlen:
@@ -282,7 +300,8 @@ def renderLastChanges(changes, maxRows=6):
         out.append(u'**%s** · %s · %s' % (
             mdEscape(cname), fmtTimestamp(ch.get('when')),
             mdEscape(ch.get('title') or u'')))
-        summary = (ch.get('summary') or {}).get('resume')
+        # stripIds: resuméer gemt før prompten blev rettet (op til 14 dage)
+        summary = stripIds((ch.get('summary') or {}).get('resume'))
         if summary:
             out.append(mdEscape(summary))
         rows = []

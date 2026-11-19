@@ -170,7 +170,8 @@ def _exportChanges():
             'tidspunkt': ch.get('when'),
             'uge': ch.get('week'),
             'titel': ch.get('title') or u'',
-            'resume': (ch.get('summary') or {}).get('resume'),
+            'resume': ssummary.stripIds(
+                (ch.get('summary') or {}).get('resume')) or None,
             'ny_ugeplan': first,
             'aendringer': rows,
         })

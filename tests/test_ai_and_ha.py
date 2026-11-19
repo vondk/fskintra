@@ -271,3 +271,67 @@ def test_update_pushes_to_ha(ha):
 
 def test_update_without_ha_does_nothing():
     assert soverview.update() is False
+
+
+#
+# Id'er hører kun hjemme i "punkter" - ikke i teksterne, forælderen læser
+#
+
+def test_prompt_keeps_ids_out_of_the_texts(fake_ai):
+    assert u'Henvis til punkter med deres id' not in sai.SYSTEM_PROMPT
+    assert u'Skriv aldrig id\'er' in sai.SYSTEM_PROMPT
+    client = fake_ai(reply={'resume': u'x', 'punkter': []})
+    diff = sdiff.diffItems(items('a'), items('b'))
+    sai.summarizeChange(CHILD, u'Uge 45', diff, items('b'))
+    call, = client.calls
+    assert u'Nævn ikke id\'er i resuméet' in call['messages'][0]['content']
+    schema = call['output_config']['format']['schema']
+    assert u'uden id\'er' in schema['properties']['resume']['description']
+
+
+def test_ids_written_in_the_texts_are_removed(fake_ai):
+    fake_ai(reply={'resume': u'Nyt punkt [0]: i dag har klassen arbejdet '
+                             u'med symmetri, side 44 og halv 45.',
+                   'punkter': [{'id': 0, 'kategori': 'info'}]})
+    diff = sdiff.diffItems(items('a'), items('b'))
+    res = sai.summarizeChange(CHILD, u'Uge 45', diff, items('b'))
+    assert res['resume'] == (u'I dag har klassen arbejdet med symmetri, '
+                             u'side 44 og halv 45.')
+
+    fake_ai(reply={'punkter': [{'id': 0, 'kategori': 'lektie',
+                                'tekst': u'[0] Læs side 12-14'}]})
+    res = sai.classifyPlan(u'Uge 45', items('b'))
+    assert res['tekster'] == {'0': u'Læs side 12-14'}
+
+
+@pytest.mark.parametrize('text, want', [
+    (u'Nyt punkt [0]: I dag symmetri.', u'I dag symmetri.'),
+    (u'Nyt punkt 0: i dag, onsdag, læser klassen.',
+     u'I dag, onsdag, læser klassen.'),
+    (u'Punkt [2] - Medbring madpakke', u'Medbring madpakke'),
+    (u'Ændret punkt 1: tur til Zoo', u'Tur til Zoo'),
+    (u'To nye lektier [0] i dansk [1].', u'To nye lektier i dansk.'),
+    # Tal i selve teksten røres ikke
+    (u'Læs side 44 og halv 45.', u'Læs side 44 og halv 45.'),
+    (u'Mødes kl. 8.30 ved skolen', u'Mødes kl. 8.30 ved skolen'),
+    (u'Punkt 3 i opgaven skal laves', u'Punkt 3 i opgaven skal laves'),
+    (u'lille begyndelsesbogstav bevares', u'lille begyndelsesbogstav bevares'),
+    (u'', u''), (None, u''),
+])
+def test_strip_ids(text, want):
+    from skoleintra import ssummary
+    assert ssummary.stripIds(text) == want
+
+
+def test_summaries_saved_before_the_fix_are_cleaned(options):
+    from skoleintra import ssummary
+    diff = sdiff.diffItems(items('b'), items('c'))
+    sstate.putWeekplan(CHILD, WID, u'Uge 45', items('c'), 'x')
+    sstate.setLastChange(CHILD, WID, u'Uge 45', diff,
+                         {'resume': u'Nyt punkt [0]: ny matematik mandag.'})
+    md = ssummary.renderLastChanges(sstate.lastChanges())
+    assert u'Ny matematik mandag.' in md and u'punkt' not in md.lower()
+    state, attributes, entries = soverview._build(datetime.date(2026, 11, 2))
+    data = soverview.exportData(state, attributes, entries,
+                                datetime.date(2026, 11, 2))
+    assert data['seneste_aendring'][0]['resume'] == u'Ny matematik mandag.'
